@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu title="Menu główne">
+  <item name="Pozdrowienie" dir="scripts/basic" file="hello.py"/>
+  <folder name="Narzędzia">
+    <item name="Demo powrotu" dir="scripts/tools" file="exit_to_root_demo.py"/>
+    <folder name="Zaawansowane">
+      <item name="Test błędu" dir="scripts/basic" file="error_demo.py"/>
+    </folder>
+  </folder>
+</menu>

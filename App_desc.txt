@@ -1,0 +1,577 @@
+=====================================================================
+SPECYFIKACJA DLA AGENTA AI: KONSOLOWE MENU W PYTHONIE STEROWANE XML
+=====================================================================
+
+CEL
+---
+Napisz aplikację w Pythonie uruchamianą w konsoli (docelowo Linux,
+testowo także Windows), która:
+  * wyświetla menu tekstowe zbudowane z pliku konfiguracyjnego XML,
+  * pozwala poruszać się klawiszami:  a = w górę,  z = w dół,
+    Enter = zatwierdź,
+  * obsługuje wiele poziomów menu (foldery / podmenu),
+  * uruchamia skrypty Pythona wskazane w XML (katalog + nazwa pliku),
+  * definiuje prosty interfejs (kontrakt), który musi spełniać
+    wywoływany skrypt, tak aby po jego zakończeniu wrócić do menu.
+
+ZASADY OGÓLNE (obowiązują w każdym kroku)
+-----------------------------------------
+  1. Tylko biblioteka standardowa Pythona (>= 3.9). Jedyna zależność
+     dodatkowa: pytest (tylko do testów).
+  2. Działa na Linuxie i Windowsie. Importy modułów specyficznych dla
+     platformy (termios, tty, msvcrt) wykonuj LENIWIE, wewnątrz funkcji
+     / klas przeznaczonych dla danej platformy, nigdy na poziomie
+     modułu współdzielonego. Testy muszą przechodzić na obu systemach
+     (testy zależne od platformy oznacz pytest.mark.skipif).
+  3. Logika oddzielona od wejścia/wyjścia (I/O). Klawiatura, ekran,
+     uruchamianie skryptów i "pauza" są wstrzykiwane (dependency
+     injection), dzięki czemu cała logika jest testowalna bez
+     prawdziwego terminala.
+  4. Type hints wszędzie, dataclass tam, gdzie to wygodne, brak
+     zmiennych globalnych ze stanem.
+  5. Kodowanie: UTF-8 (plik XML, wyjście konsoli). Teksty interfejsu po
+     polsku, zebrane w jednym module (menu_app/texts.py) jako stałe.
+  6. KOLEJNOŚĆ PRACY: dla każdego kroku najpierw napisz testy, potem
+     kod. Nie przechodź do następnego kroku, dopóki
+     `python -m pytest -q` nie jest w całości zielone.
+  7. Nie dodawaj funkcji spoza specyfikacji. Jeśli coś jest
+     niejednoznaczne, wybierz najprostsze rozwiązanie zgodne z
+     "Założeniami" i dopisz decyzję w README.
+
+---------------------------------------------------------------------
+KROK 0. ZAŁOŻENIA I DECYZJE PROJEKTOWE (już podjęte - nie zmieniaj)
+---------------------------------------------------------------------
+  * "Katalog bazowy" (base_dir) = katalog, w którym leży główny skrypt
+    main.py (Path(__file__).resolve().parent). Wszystkie ścieżki z XML
+    są relatywne względem base_dir. Da się go nadpisać argumentem
+    --base-dir (potrzebne w testach).
+  * Menu ma nawigację cykliczną: strzałka "w górę" na pierwszej pozycji
+    przechodzi na ostatnią i odwrotnie.
+  * Na końcu każdej listy jest pozycja systemowa:
+      - w menu głównym:  "Wyjście"
+      - w podmenu:       "Wstecz"
+    Pozycje systemowe nie pochodzą z XML.
+  * Skrypty uruchamiane są W TYM SAMYM PROCESIE (importlib), a nie
+    jako podproces. Powód: prosty kontrakt (funkcja run) i możliwość
+    przekazania kontekstu. Błędy skryptu nie mogą wywrócić menu.
+  * Po zakończeniu skryptu domyślnie wracamy do tego poziomu menu, z
+    którego go uruchomiono. Skrypt może zażądać powrotu do menu
+    głównego przez ctx.exit_to_root().
+  * Po zakończeniu skryptu program pokazuje komunikat "Naciśnij Enter,
+    aby wrócić do menu" (żeby użytkownik zdążył przeczytać wynik),
+    chyba że skrypt ustawił ctx.skip_pause = True.
+  * Ctrl+C w menu = czysty koniec programu (kod wyjścia 0). Ctrl+C
+    w trakcie skryptu = przerwanie skryptu i powrót do menu.
+
+---------------------------------------------------------------------
+KROK 1. STRUKTURA PROJEKTU I ŚRODOWISKO
+---------------------------------------------------------------------
+Utwórz następującą strukturę:
+
+  menu_project/
+    main.py                  # punkt wejścia (cienki, tylko argumenty)
+    menu.xml                 # przykładowa konfiguracja
+    README.md
+    requirements-dev.txt     # zawiera: pytest
+    menu_app/
+      __init__.py
+      texts.py               # stałe z tekstami UI
+      config.py              # model + parser XML + walidacja
+      paths.py               # rozwiązywanie ścieżek skryptów
+      script_api.py          # ScriptContext (kontrakt skryptu)
+      runner.py              # ładowanie i uruchamianie skryptów
+      navigator.py           # stan nawigacji (bez I/O)
+      renderer.py            # budowa tekstu ekranu (bez I/O)
+      keys.py                # odczyt klawiszy (Linux/Windows)
+      app.py                 # pętla główna (łączy wszystko)
+      terminal.py            # czyszczenie ekranu, ANSI, rozmiar okna
+    scripts/
+      basic/hello.py
+      basic/error_demo.py
+      tools/exit_to_root_demo.py
+    tests/
+      conftest.py
+      test_config.py
+      test_paths.py
+      test_runner.py
+      test_navigator.py
+      test_renderer.py
+      test_keys.py
+      test_app.py
+      test_main.py
+      test_e2e.py
+
+Testy (tests/conftest.py): dodaj katalog projektu do sys.path, jeśli
+pytest go nie widzi. Dodaj fixture `tmp_project(tmp_path)` budującą w
+katalogu tymczasowym mini-projekt (menu.xml + skrypty), używany w
+testach runnera i e2e.
+
+Definition of Done: `python -m pytest -q` uruchamia się i zbiera
+(nawet jeśli jeszcze 0 testów); importy `import menu_app` działają.
+
+---------------------------------------------------------------------
+KROK 2. FORMAT XML, MODEL DANYCH I PARSER (menu_app/config.py)
+---------------------------------------------------------------------
+Format pliku konfiguracyjnego:
+
+  <?xml version="1.0" encoding="utf-8"?>
+  <menu title="Menu główne">
+    <item name="Pozdrowienie" dir="scripts/basic" file="hello.py"/>
+    <folder name="Narzędzia">
+      <item name="Demo powrotu" dir="scripts/tools"
+            file="exit_to_root_demo.py"/>
+      <folder name="Zaawansowane">
+        <item name="Test błędu" dir="scripts/basic"
+              file="error_demo.py"/>
+      </folder>
+    </folder>
+  </menu>
+
+Reguły:
+  * Element główny: <menu>, atrybut `title` opcjonalny (domyślnie
+    "Menu główne").
+  * <folder name="..."> może zawierać <folder> i <item> (dowolna
+    głębokość). Pusty folder jest dozwolony.
+  * <item name="..." dir="..." file="..."/> - wszystkie 3 atrybuty
+    wymagane i niepuste. Element <item> nie może mieć dzieci.
+  * Kolejność w XML = kolejność w menu.
+  * `file` musi kończyć się na ".py" (bez rozróżniania wielkości liter).
+  * Nieznane elementy -> błąd. Nieznane atrybuty -> ignoruj.
+
+Model (dataclass, frozen):
+
+  @dataclass(frozen=True)
+  class ScriptItem:
+      name: str
+      directory: str      # wartość atrybutu dir (relatywna)
+      file: str
+
+  @dataclass(frozen=True)
+  class Folder:
+      name: str
+      children: tuple["MenuNode", ...]   # MenuNode = Folder | ScriptItem
+
+API:
+  class ConfigError(Exception): ...        # czytelny komunikat po polsku
+  def load_menu(xml_path: Path) -> Folder  # root; name = title
+  def parse_menu(xml_text: str) -> Folder  # to samo z tekstu (testy)
+
+Błędy (ConfigError) z komunikatem zawierającym numer linii, jeśli
+dostępny: niepoprawny XML (ParseError), zły element główny, brak
+atrybutu, pusty atrybut, zły typ pliku, nieznany element, plik XML
+nie istnieje.
+
+Testy (tests/test_config.py), minimum:
+  * poprawny prosty plik -> oczekiwane drzewo,
+  * zagnieżdżenie 3 poziomów, kolejność zachowana,
+  * domyślny tytuł, niestandardowy tytuł,
+  * pusty folder dozwolony,
+  * polskie znaki w nazwach (ą, ę, ł...),
+  * każdy przypadek błędu z listy powyżej -> ConfigError,
+  * brak pliku -> ConfigError,
+  * file="x.txt" -> ConfigError, file="X.PY" -> OK.
+
+---------------------------------------------------------------------
+KROK 3. ROZWIĄZYWANIE ŚCIEŻEK SKRYPTÓW (menu_app/paths.py)
+---------------------------------------------------------------------
+  def resolve_script_path(base_dir: Path, item: ScriptItem) -> Path
+
+Reguły:
+  * Zamień "\" na "/" w `dir` (konfiguracja przenośna między OS).
+  * `dir` musi być relatywne (nie absolutne, bez litery dysku).
+  * Wynik = (base_dir / dir / file).resolve().
+  * Wynik musi leżeć wewnątrz base_dir.resolve() (ochrona przed
+    "../../coś"). Naruszenie -> ConfigError.
+  * Brak pliku lub to nie jest plik -> ScriptNotFoundError
+    (podklasa Exception; komunikat zawiera ścieżkę).
+  * Sprawdzanie istnienia pliku następuje w momencie uruchomienia, a
+    nie przy wczytywaniu XML (menu ma działać mimo brakującego
+    skryptu - użytkownik dostanie komunikat po wybraniu pozycji).
+
+Testy (tests/test_paths.py): poprawna ścieżka, separator "\",
+ścieżka absolutna -> błąd, "../poza" -> błąd, brak pliku ->
+ScriptNotFoundError, katalog zamiast pliku -> ScriptNotFoundError.
+
+---------------------------------------------------------------------
+KROK 4. KONTRAKT SKRYPTU I RUNNER (script_api.py, runner.py)
+---------------------------------------------------------------------
+KONTRAKT, KTÓRY MUSI SPEŁNIAĆ KAŻDY WYWOŁYWANY SKRYPT:
+
+  1. To zwykły plik .py zawierający funkcję na poziomie modułu:
+
+         def run(ctx) -> int | None:
+             ...
+
+  2. Wartość zwracana:
+       None lub 0  -> sukces,
+       inna liczba całkowita -> błąd (menu pokaże kod).
+  3. Powrót do menu = zwykłe zakończenie funkcji run (return).
+     Dopuszczalne są też: sys.exit(n) (traktowane jak return n)
+     oraz Ctrl+C (traktowane jak anulowanie).
+  4. Kod na poziomie modułu (poza run) nie powinien nic wykonywać
+     (importowanie ma być bez efektów ubocznych).
+  5. Skrypt używa zwykłych print() / input() - terminal jest w
+     trybie normalnym (menu przywraca go przed uruchomieniem).
+  6. Skrypt może importować moduły leżące obok siebie - katalog
+     skryptu jest na czas działania dodany do sys.path.
+  7. Skrypt NIE zmienia katalogu roboczego procesu.
+
+ScriptContext (script_api.py), dataclass:
+
+  base_dir: Path                  # katalog bazowy aplikacji
+  script_path: Path               # pełna ścieżka uruchamianego pliku
+  script_dir: Path                # katalog skryptu
+  menu_path: tuple[str, ...]      # np. ("Narzędzia", "Zaawansowane")
+  skip_pause: bool = False        # True -> brak "Naciśnij Enter..."
+  exit_to_root_requested: bool = False  # ustawiane przez metodę
+
+  def exit_to_root(self) -> None   # ustawia flagę; skrypt potem robi return
+  def pause(self, message: str = texts.PRESS_ENTER) -> None
+        # wywołuje input(message); EOFError ignoruj
+
+Runner (runner.py):
+
+  @dataclass
+  class RunResult:
+      ok: bool
+      return_code: int           # 0 = sukces
+      error: str | None          # komunikat dla użytkownika
+      exit_to_root: bool
+      skip_pause: bool
+
+  def run_script(ctx: ScriptContext) -> RunResult
+
+Zachowanie run_script:
+  * Ładuje plik przez importlib.util.spec_from_file_location pod
+    unikalną nazwą modułu (np. "menu_script_<hash ścieżki>").
+    Moduł NIE zostaje na stałe w sys.modules (usuń w finally) -
+    każde uruchomienie to świeże wykonanie pliku.
+  * Na czas wykonania wstaw ctx.script_dir na początek sys.path;
+    w finally przywróć sys.path do stanu sprzed wywołania.
+  * Brak funkcji `run` lub nie jest callable -> RunResult(ok=False,
+    error="Skrypt nie definiuje funkcji run(ctx)").
+  * Wyjątek podczas importu lub w run -> wypisz traceback
+    (traceback.print_exc()), zwróć ok=False z krótkim komunikatem.
+    Nigdy nie propaguj wyjątku (poza KeyboardInterrupt - patrz niżej).
+  * SystemExit(code): None->0, int->int, inne->1; ok = (kod == 0).
+  * KeyboardInterrupt: złap, wypisz "Przerwano.", ok=True,
+    return_code=130 NIE jest błędem - ustaw ok=True, error=None.
+  * Zwrócona wartość nie-int (poza None) -> traktuj jak błąd
+    kontraktu: ok=False, komunikat "run() powinno zwrócić int lub None".
+  * Skopiuj ctx.exit_to_root_requested i ctx.skip_pause do RunResult.
+
+Testy (tests/test_runner.py) na plikach tworzonych w tmp_path:
+  * run zwraca None -> ok; zwraca 0 -> ok; zwraca 3 -> ok=False,
+    return_code=3,
+  * brak funkcji run, run nie jest funkcją,
+  * wyjątek w run (RuntimeError) -> ok=False, menu "przeżywa",
+  * wyjątek przy imporcie (SyntaxError, błąd na poziomie modułu),
+  * sys.exit(0), sys.exit(5), sys.exit("tekst"),
+  * KeyboardInterrupt rzucony w run -> ok=True,
+  * skrypt ustawia ctx.exit_to_root() -> RunResult.exit_to_root=True,
+  * skrypt ustawia ctx.skip_pause=True -> przepisane,
+  * sys.path przywrócony po uruchomieniu (także po błędzie),
+  * skrypt importujący sąsiedni moduł pomocniczy działa,
+  * dwa kolejne uruchomienia tego samego pliku wykonują go od nowa
+    (np. licznik w pliku/zmienna modułu nie jest zachowana),
+  * stdout skryptu jest widoczny (capsys).
+
+---------------------------------------------------------------------
+KROK 5. NAWIGACJA - STAN MENU BEZ I/O (menu_app/navigator.py)
+---------------------------------------------------------------------
+Czysta logika, zero printów i zero odczytu klawiszy.
+
+  class EntryKind(Enum): FOLDER, SCRIPT, BACK, EXIT
+
+  @dataclass(frozen=True)
+  class Entry:
+      kind: EntryKind
+      label: str
+      node: MenuNode | None     # Folder lub ScriptItem; None dla BACK/EXIT
+
+  Akcje zwracane przez activate():
+      @dataclass(frozen=True) class Stay: ...        # nic się nie dzieje
+      @dataclass(frozen=True) class RunScript:
+          item: ScriptItem
+          menu_path: tuple[str, ...]
+      @dataclass(frozen=True) class Quit: ...
+
+  class Navigator:
+      def __init__(self, root: Folder)
+      def entries(self) -> list[Entry]       # dzieci + BACK/EXIT na końcu
+      def selected_index(self) -> int
+      def move_up(self) -> None              # cyklicznie
+      def move_down(self) -> None            # cyklicznie
+      def activate(self) -> Stay | RunScript | Quit
+      def breadcrumb(self) -> tuple[str, ...]   # nazwy folderów bez roota
+      def title(self) -> str                 # tytuł roota
+      def go_root(self) -> None              # reset do głównego menu
+
+Reguły:
+  * activate() na FOLDER: wchodzi głębiej, zaznaczenie = 0, zwraca Stay.
+  * activate() na BACK: wraca poziom wyżej i PRZYWRACA zaznaczenie,
+    które tam było przed wejściem w podmenu; zwraca Stay.
+  * activate() na EXIT: zwraca Quit.
+  * activate() na SCRIPT: zwraca RunScript (stan nawigacji się nie
+    zmienia).
+  * W root ostatnia pozycja = EXIT, w podmenu = BACK.
+  * Pusty folder: lista zawiera tylko BACK (zaznaczenie 0).
+  * go_root(): czyści stos, zaznaczenie w root = 0.
+
+Testy (tests/test_navigator.py): wejście/wyjście z folderu,
+zapamiętanie pozycji po powrocie (w 3 poziomach), cykliczność w górę
+i w dół, pusty folder, root tylko z EXIT, breadcrumb, go_root z
+głębokiego poziomu, RunScript niesie poprawny menu_path,
+Quit tylko z EXIT.
+
+---------------------------------------------------------------------
+KROK 6. RENDERER (menu_app/renderer.py)
+---------------------------------------------------------------------
+Czysta funkcja budująca tekst ekranu:
+
+  def render_screen(title: str,
+                    breadcrumb: tuple[str, ...],
+                    labels: list[str],
+                    selected: int,
+                    width: int,
+                    height: int) -> str
+
+Układ ekranu (każda linia kończy się "\n", bez kodów ANSI w treści,
+żeby testy były proste):
+
+  linia 1: title  (lub "title / folder / podfolder" gdy breadcrumb
+           niepusty)
+  linia 2: separator z znaków "-" o długości min(width, 40)
+  linie:   pozycje: "> etykieta" dla zaznaczonej, "  etykieta" dla
+           pozostałych
+  linia:   pusta
+  stopka:  "a - góra | z - dół | Enter - zatwierdź"
+
+Reguły:
+  * Okno przewijania (viewport): liczba widocznych pozycji =
+    max(1, height - 5) (nagłówek 2 + pusta 1 + stopka 1 + zapas 1).
+    Zaznaczona pozycja ZAWSZE jest widoczna. Gdy część listy jest
+    ukryta, dodaj wiersze wskaźników "  ..." na górze/dole (liczą się
+    do limitu wysokości).
+  * Linie dłuższe niż width obcinaj do width-1 znaków i dodawaj "…".
+  * Brak wyjątków dla bardzo małych okien (width < 10, height < 6).
+
+Testy (tests/test_renderer.py): zaznaczony wiersz ma prefiks "> ",
+tylko jeden zaznaczony, breadcrumb w nagłówku, stopka obecna,
+przewijanie: lista 50 pozycji w oknie 10 wierszy - zaznaczona widoczna
+dla indeksów 0, 25, 49 oraz wskaźniki "..." we właściwych miejscach,
+obcinanie długiej etykiety, małe okno bez wyjątku, polskie znaki.
+
+---------------------------------------------------------------------
+KROK 7. ODCZYT KLAWISZY (menu_app/keys.py)
+---------------------------------------------------------------------
+  class Key(Enum): UP, DOWN, ENTER, INTERRUPT, OTHER
+
+  def map_char(ch: str) -> Key        # czysta funkcja
+      "a","A"           -> UP
+      "z","Z"           -> DOWN
+      "\r","\n"         -> ENTER
+      "\x03" (Ctrl+C)   -> INTERRUPT
+      wszystko inne     -> OTHER
+
+  class KeyReader(Protocol):
+      def read_key(self) -> Key
+
+  class PosixKeyReader:
+      read_key(): 
+        - fd = sys.stdin.fileno(); zapisz termios.tcgetattr(fd);
+          tty.setcbreak(fd)  (lub setraw z obsługą Ctrl+C przez "\x03");
+          przeczytaj 1 znak (os.read(fd, 1) zdekodowany utf-8
+          z errors="ignore"); w finally ZAWSZE przywróć ustawienia
+          (termios.tcsetattr(fd, TCSADRAIN, old)).
+        - Sekwencje ucieczki (strzałki: "\x1b[A") ignoruj -> OTHER
+          (pochłoń resztę sekwencji, żeby nie "wyciekła").
+        - EOF (pusty odczyt) -> INTERRUPT.
+        - Importy termios/tty wewnątrz klasy/metody.
+
+  class WindowsKeyReader:
+      read_key(): msvcrt.getwch(); jeśli znak to "\x00" lub "\xe0"
+      (klawisze specjalne) -> pochłoń kolejny znak i zwróć OTHER;
+      "\x03" -> INTERRUPT. Import msvcrt wewnątrz klasy/metody.
+
+  def create_key_reader() -> KeyReader   # wybór po os.name == "nt"
+
+  class FakeKeyReader (w tests/ lub w menu_app/testing.py):
+      przyjmuje listę Key i zwraca je po kolei; po wyczerpaniu rzuca
+      AssertionError("brak kolejnych klawiszy") - zabezpiecza testy
+      przed nieskończoną pętlą.
+
+Testy (tests/test_keys.py): map_char dla wszystkich przypadków i
+kilku losowych znaków; create_key_reader zwraca właściwą klasę (monkey-
+patch os.name nie jest wymagany - wystarczy test zależny od
+platformy); test PosixKeyReader na pseudoterminalu (stdlib `pty`:
+pty.openpty(), podmiana sys.stdin na slave, zapis "a", "z", "\r",
+"\x1b[A" po stronie master) - oznacz
+@pytest.mark.skipif(os.name == "nt"); sprawdź też, że po read_key()
+ustawienia termios są przywrócone.
+
+---------------------------------------------------------------------
+KROK 8. PĘTLA GŁÓWNA APLIKACJI (menu_app/app.py, terminal.py)
+---------------------------------------------------------------------
+terminal.py:
+  def enable_ansi() -> None      # Windows: os.system("") lub ctypes
+                                 # (włączenie VT); Linux: nic
+  def clear_screen(out) -> None  # out.write("\x1b[2J\x1b[H"); flush
+  def get_size() -> tuple[int, int]   # shutil.get_terminal_size(
+                                      #     fallback=(80, 24))
+
+app.py:
+
+  class App:
+      def __init__(self, root: Folder, base_dir: Path,
+                   key_reader: KeyReader, out: TextIO,
+                   script_runner = run_script,
+                   pause = input,
+                   size_provider = get_size,
+                   clear = clear_screen)
+      def run(self) -> int          # zwraca kod wyjścia procesu
+
+Pętla:
+  1. navigator = Navigator(root)
+  2. powtarzaj:
+       a) clear(out); out.write(render_screen(...)); flush
+       b) key = key_reader.read_key()
+       c) UP -> move_up; DOWN -> move_down; OTHER -> ignoruj;
+          INTERRUPT -> zwróć 0 (czyste wyjście);
+          ENTER -> action = navigator.activate():
+             - Stay: kontynuuj,
+             - Quit: zwróć 0,
+             - RunScript: wykonaj procedurę uruchomienia (niżej).
+  3. Procedura uruchomienia skryptu:
+       * clear(out)
+       * path = resolve_script_path(base_dir, item); przy
+         ConfigError/ScriptNotFoundError wypisz komunikat błędu i
+         zrób pauzę (menu NIE kończy działania),
+       * ctx = ScriptContext(...menu_path=action.menu_path...)
+       * result = script_runner(ctx)
+       * jeśli not result.ok: wypisz result.error i kod,
+       * jeśli not (result.skip_pause): pause(texts.PRESS_ENTER)
+         (EOFError z pause ignoruj),
+       * jeśli result.exit_to_root: navigator.go_root().
+  4. Terminal po wyjściu musi być w stanie normalnym (guarantee
+     przez PosixKeyReader - przywraca ustawienia po każdym znaku).
+
+Testy (tests/test_app.py) z FakeKeyReader, io.StringIO jako out,
+clear = lambda out: None, pause = lambda msg="": None, atrapa
+script_runner zapisująca wywołania:
+  * ENTER na "Wyjście" kończy z kodem 0,
+  * [DOWN, ENTER] wybiera drugą pozycję itd. (sprawdź, że
+    script_runner dostał odpowiedni plik i menu_path),
+  * wejście do podmenu, uruchomienie skryptu, powrót "Wstecz",
+  * po skrypcie wracamy na ten sam poziom i to samo zaznaczenie,
+  * skrypt z exit_to_root -> kolejny ekran to menu główne,
+  * skrypt z błędem (ok=False) -> komunikat błędu na out, menu działa,
+  * brakujący plik skryptu -> komunikat i dalsze działanie,
+  * klawisze OTHER ignorowane (ekran bez zmian),
+  * INTERRUPT kończy kod 0,
+  * skip_pause=True -> pause nie jest wywołane; domyślnie jest,
+  * ekran zawiera pozycje z XML (sprawdź na out.getvalue()).
+
+---------------------------------------------------------------------
+KROK 9. PUNKT WEJŚCIA (main.py)
+---------------------------------------------------------------------
+  def main(argv: list[str] | None = None,
+           key_reader=None, out=None) -> int
+
+  Argumenty (argparse):
+    --config PATH     domyślnie <base_dir>/menu.xml
+    --base-dir PATH   domyślnie katalog, w którym leży main.py
+
+  Zachowanie:
+    * Windows: sys.stdout.reconfigure(encoding="utf-8",
+      errors="replace") (jeśli metoda dostępna); enable_ansi().
+    * ConfigError przy wczytywaniu XML -> komunikat na stderr,
+      kod wyjścia 2.
+    * Gdy stdin nie jest terminalem (not sys.stdin.isatty()) i nie
+      wstrzyknięto key_reader -> komunikat na stderr, kod wyjścia 3.
+    * W przeciwnym razie: App(...).run() i zwrócenie jego kodu.
+    * Na dole pliku:  if __name__ == "__main__": sys.exit(main())
+
+Testy (tests/test_main.py): zły XML -> kod 2 i komunikat na stderr
+(capsys); brak pliku konfiguracji -> kod 2; --base-dir i --config
+przekazane poprawnie; brak TTY bez wstrzykniętego readera -> kod 3;
+poprawny start ze sztucznym readerem [ENTER na "Wyjście"] -> kod 0.
+
+---------------------------------------------------------------------
+KROK 10. PRZYKŁADOWE SKRYPTY I TESTY END-TO-END
+---------------------------------------------------------------------
+Skrypty przykładowe (scripts/...), każdy z kontraktem z kroku 4:
+
+  scripts/basic/hello.py
+      run(ctx): print("Witaj!"); wypisz ctx.menu_path i
+      ctx.script_path; return 0
+
+  scripts/basic/error_demo.py
+      run(ctx): raise RuntimeError("Celowy błąd demonstracyjny")
+
+  scripts/tools/exit_to_root_demo.py
+      run(ctx): print("Wracam do menu głównego");
+      ctx.exit_to_root(); return None
+
+Testy e2e (tests/test_e2e.py), na prawdziwym App + prawdziwym
+run_script + FakeKeyReader, w tmp_path (fixture tmp_project):
+  * skrypt zapisuje plik-znacznik -> po sekwencji klawiszy plik
+    istnieje (dowód, że został uruchomiony),
+  * skrypt błędny nie przerywa działania aplikacji, a kolejne
+    wejście w menu działa,
+  * exit_to_root z głębokiego poziomu,
+  * pełna ścieżka: root -> folder -> podfolder -> skrypt -> Wstecz
+    x2 -> Wyjście; kod 0,
+  * (tylko Linux, skipif nt) test na pseudoterminalu: uruchom
+    `python main.py --base-dir <tmp> --config <tmp>/menu.xml` przez
+    pty.fork()/subprocess z podpiętym slave pty; wyślij "z", "\r"
+    (uruchom skrypt), "\r" (pauza), potem nawiguj do "Wyjście" i
+    sprawdź kod wyjścia 0 oraz obecność tekstu ze skryptu w
+    wyjściu. Ustaw timeout (np. 10 s), aby test nie zawisł.
+
+---------------------------------------------------------------------
+KROK 11. README I KRYTERIA AKCEPTACJI
+---------------------------------------------------------------------
+README.md (po polsku) musi zawierać:
+  * jak uruchomić:  python main.py   (Linux i Windows),
+  * jak uruchomić testy:  pip install -r requirements-dev.txt
+    oraz  python -m pytest -q
+  * opis formatu menu.xml z przykładem,
+  * opis KONTRAKTU SKRYPTU (sekcja z kroku 4) wraz z minimalnym
+    szablonem:
+
+        def run(ctx):
+            print("Moja akcja")
+            return 0
+
+  * opis klawiszy: a = góra, z = dół, Enter = zatwierdź,
+    Ctrl+C = wyjście,
+  * listę decyzji z kroku 0 i wszelkich własnych decyzji agenta.
+
+KRYTERIA AKCEPTACJI (agent sprawdza je na koniec):
+  [ ] `python -m pytest -q` - wszystko zielone na Linuxie,
+  [ ] (jeśli dostępny Windows) testy zielone również tam, testy
+      pty pominięte,
+  [ ] `python main.py` pokazuje menu z menu.xml, a / z / Enter
+      działają, "Wyjście" kończy program,
+  [ ] podmenu wielopoziomowe działa, "Wstecz" przywraca pozycję,
+  [ ] skrypt z błędem nie zabija menu,
+  [ ] brak plików z biblioteką spoza stdlib (poza pytest w dev),
+  [ ] brak importów termios/tty/msvcrt na poziomie modułów
+      współdzielonych (sprawdź ręcznie: import menu_app.keys działa
+      na obu systemach),
+  [ ] terminal Linux po wyjściu jest w normalnym stanie (echo
+      działa) - także po Ctrl+C.
+
+---------------------------------------------------------------------
+MOŻLIWE ROZSZERZENIA (NIE implementuj bez polecenia)
+---------------------------------------------------------------------
+  * opcjonalny atrybut `args` dla <item> (argumenty dla skryptu),
+  * opcjonalny atrybut `description` wyświetlany w stopce,
+  * dodatkowe klawisze (strzałki, q),
+  * przeładowanie konfiguracji bez restartu,
+  * uruchamianie skryptów jako podproces z izolacją.
+
+=====================================================================
+KONIEC SPECYFIKACJI
+=====================================================================

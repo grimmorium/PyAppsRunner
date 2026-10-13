@@ -1,0 +1,4 @@
+Read the App_desc.txt file, it contains the description of steps in which an application has to be writen.
+Procede with executing as described in the document.
+It would be best if you compact the context between phases.
+work on all phases without waiting for my responses
