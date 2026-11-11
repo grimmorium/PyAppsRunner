@@ -1,4 +1,4 @@
-"""Testy rozwiązywania ścieżek skryptów (Krok 3 specyfikacji)."""
+"""Tests of script path resolution (Step 3 of the specification)."""
 
 from pathlib import Path
 
@@ -29,32 +29,32 @@ def test_backslash_separator_normalized(tmp_path: Path) -> None:
 
 def test_absolute_dir_rejected(tmp_path: Path) -> None:
     _make(tmp_path, "a.py")
-    for bad_dir in ("/abs/scripts", r"C:\skrypty"):
+    for bad_dir in ("/abs/scripts", r"C:\scripts"):
         item = ScriptItem(name="x", directory=bad_dir, file="a.py")
         with pytest.raises(ConfigError):
             resolve_script_path(tmp_path, item)
 
 
 def test_escape_outside_base_rejected(tmp_path: Path) -> None:
-    # plik istnieje POZA bazą - bez ochrony zostałby znaleziony
-    outside = tmp_path / "poza"
+    # the file exists OUTSIDE the base - without protection it would be found
+    outside = tmp_path / "outside"
     outside.mkdir()
-    (outside / "ucieczka.py").write_text("x", encoding="utf-8")
-    item = ScriptItem(name="x", directory="../poza", file="ucieczka.py")
+    (outside / "escape.py").write_text("x", encoding="utf-8")
+    item = ScriptItem(name="x", directory="../outside", file="escape.py")
     with pytest.raises(ConfigError):
         resolve_script_path(tmp_path, item)
 
 
 def test_missing_file_raises_not_found(tmp_path: Path) -> None:
     _make(tmp_path, "scripts/basic/other.py")
-    item = ScriptItem(name="x", directory="scripts/basic", file="brak.py")
+    item = ScriptItem(name="x", directory="scripts/basic", file="missing.py")
     with pytest.raises(ScriptNotFoundError) as excinfo:
         resolve_script_path(tmp_path, item)
-    assert str(excinfo.value)  # komunikat nie jest pusty
+    assert str(excinfo.value)  # message is not empty
 
 
 def test_directory_instead_of_file_raises_not_found(tmp_path: Path) -> None:
-    (tmp_path / "katalog.py").mkdir()
-    item = ScriptItem(name="x", directory=".", file="katalog.py")
+    (tmp_path / "catalog.py").mkdir()
+    item = ScriptItem(name="x", directory=".", file="catalog.py")
     with pytest.raises(ScriptNotFoundError):
         resolve_script_path(tmp_path, item)

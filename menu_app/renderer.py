@@ -1,9 +1,9 @@
-"""Budowa tekstu ekranu menu - czysta funkcja bez I/O (Krok 6 specyfikacji).
+"""Building the menu screen text - a pure function without I/O (Step 6 of the specification).
 
-Układ: nagłówek, separator "-", pozycje ("> " = zaznaczona), pusta linia,
-stopka. Lista mieści się w oknie max(1, height - 5) linii; ukryte części
-oznacza wiersz "  ...". Linie dłuższe niż width obcina się do width-1
-znaków i dopisuje "…". Treść nie zawiera kodów ANSI.
+Layout: header, "-" separator, entries ("> " = selected), blank line,
+footer. The list fits in max(1, height - 5) lines; hidden parts are marked
+with a "  ..." row. Lines longer than width are truncated to width-1
+characters with an appended "…". The content contains no ANSI codes.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ INDICATOR = "  ..."
 
 
 def _fit(line: str, width: int) -> str:
-    """Odcina linię dłuższą niż ``width`` (do width-1 znaków + „…")."""
+    """Truncates a line longer than ``width`` (to width-1 chars + "…")."""
     if len(line) > width:
         return line[: max(width - 1, 0)] + "…"
     return line
@@ -30,11 +30,11 @@ def render_screen(
     width: int,
     height: int,
 ) -> str:
-    """Buduje pełny tekst ekranu; każda linia kończy się „\\n"."""
+    """Builds the full screen text; every line ends with "\\n"."""
     header = title if not breadcrumb else " / ".join([title, *breadcrumb])
 
     total = len(labels)
-    budget = max(1, height - 5)  # nagłówek 2 + pusta 1 + stopka 1 + zapas 1
+    budget = max(1, height - 5)  # header 2 + blank 1 + footer 1 + spare 1
     start, end = 0, total
     if total > budget:
         entries_count = max(1, budget - 2) if budget >= 3 else 1

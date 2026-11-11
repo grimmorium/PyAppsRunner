@@ -1,7 +1,7 @@
-"""Odczyt klawiszy na Linuxie (termios/tty) i Windowsie (msvcrt) (Krok 7).
+"""Key reading on Linux (termios/tty) and Windows (msvcrt) (Step 7).
 
-Importy modułów specyficznych dla platformy są leniwe - wewnątrz metod
-klas, dzięki czemu import tego modułu działa na obu systemach.
+Imports of platform-specific modules are lazy - inside class methods, so
+importing this module works on both systems.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Protocol, runtime_checkable
 
 
 class Key(Enum):
-    """Znormalizowany klawisz rozpoznawany przez pętlę główną."""
+    """Normalized key recognized by the main loop."""
 
     UP = "up"
     DOWN = "down"
@@ -22,7 +22,7 @@ class Key(Enum):
 
 
 def map_char(ch: str) -> Key:
-    """Czyste mapowanie pojedynczego znaku na klawisz."""
+    """Pure mapping of a single character to a key."""
     if ch in ("a", "A"):
         return Key.UP
     if ch in ("z", "Z"):
@@ -36,19 +36,19 @@ def map_char(ch: str) -> Key:
 
 @runtime_checkable
 class KeyReader(Protocol):
-    """Kontrakt odczytu klawisza (wstrzykiwany do App)."""
+    """Key reading contract (injected into App)."""
 
-    def read_key(self) -> Key:  # pragma: no cover - protokół
+    def read_key(self) -> Key:  # pragma: no cover - protocol
         raise NotImplementedError
 
 
 class PosixKeyReader:
-    """Liniowy odczyt znaku w trybie cbreak; termios przywracane zawsze."""
+    """Single-character linear read in cbreak mode; termios always restored."""
 
     def read_key(self) -> Key:
         import sys
         import termios
-        import tty  # leniwe - tylko na POSIX
+        import tty  # lazy - POSIX only
 
         fd = sys.stdin.fileno()
         old_settings = termios.tcgetattr(fd)
@@ -56,11 +56,11 @@ class PosixKeyReader:
             tty.setcbreak(fd)
             data = os.read(fd, 1)
             if not data:
-                return Key.INTERRUPT  # EOF (np. zamknięty stdin)
+                return Key.INTERRUPT  # EOF (e.g. closed stdin)
             ch = data.decode("utf-8", errors="ignore")
             if ch == "\x1b":
-                # sekwencja ucieczki (strzałka np. "\\x1b[A") - pochłoń resztę,
-                # żeby nie "wyciekła" do kolejnych odczytów
+                # escape sequence (arrow key e.g. "\\x1b[A") - swallow the rest,
+                # so it does not "leak" into subsequent reads
                 for _ in range(2):
                     rest = os.read(fd, 1)
                     if not rest:
@@ -72,14 +72,14 @@ class PosixKeyReader:
 
 
 class WindowsKeyReader:
-    """Odczyt znaku przez msvcrt.getwch; klawisze specjalne -> OTHER."""
+    """Character read via msvcrt.getwch; special keys -> OTHER."""
 
     def read_key(self) -> Key:
-        import msvcrt  # leniwe - tylko na Windows
+        import msvcrt  # lazy - Windows only
 
         ch = msvcrt.getwch()
         if ch in ("\x00", "\xe0"):
-            # przednik klawisza specjalnego (strzałki itd.) - pochłoń rozszerzenie
+            # prefix of a special key (arrows etc.) - swallow the extension byte
             msvcrt.getwch()
             return Key.OTHER
         if ch == "\x03":
@@ -88,7 +88,7 @@ class WindowsKeyReader:
 
 
 def create_key_reader() -> KeyReader:
-    """Wybiera czytnik klawiszy dla bieżącej platformy (os.name)."""
+    """Chooses the key reader for the current platform (os.name)."""
     if os.name == "nt":
         return WindowsKeyReader()
     return PosixKeyReader()

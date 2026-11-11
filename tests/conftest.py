@@ -1,8 +1,8 @@
-"""Wspólna konfiguracja testów.
+"""Shared test configuration.
 
-Dodaje katalog projektu do sys.path (jeśli pytest go nie widzi) oraz
-definiuje fixture `tmp_project` budującą mini-projekt w katalogu
-tymczasowym: menu.xml + przykładowe skrypty spełniające kontrakt z Kroku 4.
+Adds the project directory to sys.path (if pytest does not see it) and
+defines the `tmp_project` fixture building a mini-project in a temporary
+directory: menu.xml + sample scripts fulfilling the Step 4 contract.
 """
 
 import sys
@@ -17,18 +17,18 @@ if str(PROJECT_DIR) not in sys.path:
 
 MENU_XML_TEMPLATE = """<?xml version="1.0" encoding="utf-8"?>
 <menu title="{title}">
-  <item name="Znacznik" dir="scripts/basic" file="marker.py"/>
-  <item name="Błęd demo" dir="scripts/basic" file="boom.py"/>
-  <folder name="Narzędzia">
-    <folder name="Głęboko">
-      <item name="Do roota" dir="scripts/tools" file="to_root.py"/>
-      <item name="Głęboki skrypt" dir="scripts/deep" file="deep.py"/>
+  <item name="Marker" dir="scripts/basic" file="marker.py"/>
+  <item name="Error demo" dir="scripts/basic" file="boom.py"/>
+  <folder name="Tools">
+    <folder name="Deep">
+      <item name="To root" dir="scripts/tools" file="to_root.py"/>
+      <item name="Deep script" dir="scripts/deep" file="deep.py"/>
     </folder>
   </folder>
 </menu>
 """
 
-# Każdy skrypt spełnia kontrakt z Kroku 4 (funkcja run(ctx) na poziomie modułu).
+# Each script fulfills the Step 4 contract (module-level run(ctx) function).
 PROJECT_SCRIPTS = {
     "scripts/basic/marker.py": (
         'def run(ctx):\n'
@@ -37,17 +37,17 @@ PROJECT_SCRIPTS = {
     ),
     "scripts/basic/boom.py": (
         'def run(ctx):\n'
-        '    raise RuntimeError("Celowy błąd testowy")\n'
+        '    raise RuntimeError("Intentional test error")\n'
     ),
     "scripts/tools/to_root.py": (
         'def run(ctx):\n'
-        '    print("Zwracam do menu glownego")\n'
+        '    print("Returning to main menu")\n'
         "    ctx.exit_to_root()\n"
         "    return None\n"
     ),
     "scripts/deep/deep.py": (
         'def run(ctx):\n'
-        '    print("Gleboki skrypt dziala")\n'
+        '    print("Deep script works")\n'
         "    return 0\n"
     ),
 }
@@ -55,11 +55,11 @@ PROJECT_SCRIPTS = {
 
 @pytest.fixture
 def tmp_project(tmp_path: Path) -> Path:
-    """Mini-projekt w katalogu tymczasowym (menu.xml + skrypty)."""
+    """Mini-project in a temporary directory (menu.xml + scripts)."""
     for rel, content in PROJECT_SCRIPTS.items():
         script = tmp_path / rel
         script.parent.mkdir(parents=True, exist_ok=True)
         script.write_text(content, encoding="utf-8")
     xml_file = tmp_path / "menu.xml"
-    xml_file.write_text(MENU_XML_TEMPLATE.format(title="Menu testowe"), encoding="utf-8")
+    xml_file.write_text(MENU_XML_TEMPLATE.format(title="Test menu"), encoding="utf-8")
     return tmp_path

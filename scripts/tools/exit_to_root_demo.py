@@ -1,12 +1,12 @@
-"""Przykładowy skrypt demonstrujący powrót do menu głównego.
+"""Sample script demonstrating the return to the main menu.
 
-Po zakończeniu run() menu wraca nie na poziom, z którego uruchomiono
-skrypt, lecz bezpośrednio do menu głównego (ctx.exit_to_root()).
+After run() finishes, the menu returns not to the level from which the
+script was launched, but directly to the main menu (ctx.exit_to_root()).
 """
 
 
 def run(ctx):
-    """Informuje o powrocie i ustawia flagę exit_to_root."""
-    print("Wracam do menu głównego")
+    """Announces the return and sets the exit_to_root flag."""
+    print("Returning to the main menu")
     ctx.exit_to_root()
     return None

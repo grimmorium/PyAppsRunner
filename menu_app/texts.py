@@ -1,46 +1,46 @@
-"""Stałe teksty interfejsu użytkownika (po polsku).
+"""User interface text constants (English).
 
-Wszystkie komunikaty widoczne dla użytkownika są zebrane w tym module.
-Szablony z {placeholder}ami wypełnia się metodą str.format().
+All user-visible messages are collected in this module.
+Templates with {placeholder}s are filled using str.format().
 """
 
-# Tytuł i pozycje systemowe menu
-DEFAULT_MENU_TITLE = "Menu główne"
-EXIT_LABEL = "Wyjście"
-BACK_LABEL = "Wstecz"
+# Menu title and system entries
+DEFAULT_MENU_TITLE = "Main Menu"
+EXIT_LABEL = "Exit"
+BACK_LABEL = "Back"
 
-# Stopka ekranu menu
-FOOTER_TEXT = "a - góra | z - dół | Enter - zatwierdź"
+# Menu screen footer
+FOOTER_TEXT = "a - up | z - down | Enter - confirm"
 
-# Pauza po zakończeniu skryptu
-PRESS_ENTER = "Naciśnij Enter, aby wrócić do menu"
+# Pause after a script finishes
+PRESS_ENTER = "Press Enter to return to the menu"
 
-# Przerwanie (Ctrl+C) w trakcie skryptu
-INTERRUPTED_MESSAGE = "Przerwano."
+# Interruption (Ctrl+C) during a script run
+INTERRUPTED_MESSAGE = "Interrupted."
 
-# --- Błędy konfiguracji XML (menu_app/config.py) ---
-ERR_CONFIG_FILE_NOT_FOUND = "Plik konfiguracyjny nie istnieje: {path}"
-ERR_CONFIG_READ_ERROR = "Błąd odczytu pliku konfiguracyjnego: {error}"
-ERR_XML_PARSE = "Niepoprawny XML ({detail})"
-ERR_BAD_ROOT_ELEMENT = 'Zły element główny: oczekiwano <menu>, znaleziono <{tag}>'
-ERR_MISSING_ATTRIBUTE = "Brak atrybutu '{attr}' w elemencie <{tag}>"
-ERR_EMPTY_ATTRIBUTE = "Pusty atrybut '{attr}' w elemencie <{tag}>"
-ERR_ITEM_HAS_CHILDREN = 'Element <item> nie może zawierać podelementów (nazwa: {name})'
-ERR_UNKNOWN_ELEMENT = 'Nieznany element <{tag}>'
-ERR_BAD_FILE_EXTENSION = "Atrybut file musi wskazywać plik .py, znaleziono: {value}"
+# --- XML configuration errors (menu_app/config.py) ---
+ERR_CONFIG_FILE_NOT_FOUND = "Configuration file does not exist: {path}"
+ERR_CONFIG_READ_ERROR = "Error reading the configuration file: {error}"
+ERR_XML_PARSE = "Invalid XML ({detail})"
+ERR_BAD_ROOT_ELEMENT = 'Bad root element: expected <menu>, found <{tag}>'
+ERR_MISSING_ATTRIBUTE = "Missing attribute '{attr}' in element <{tag}>"
+ERR_EMPTY_ATTRIBUTE = "Empty attribute '{attr}' in element <{tag}>"
+ERR_ITEM_HAS_CHILDREN = '<item> cannot contain child elements (name: {name})'
+ERR_UNKNOWN_ELEMENT = 'Unknown element <{tag}>'
+ERR_BAD_FILE_EXTENSION = "The file attribute must point to a .py file, found: {value}"
 
-# --- Błędy ścieżek skryptów (menu_app/paths.py) ---
-ERR_ABSOLUTE_DIR = "Katalog w konfiguracji musi być relatywny, znaleziono: {dir}"
-ERR_SCRIPT_OUTSIDE_BASE = "Ścieżka skryptu wychodzi poza katalog bazowy: {path}"
-ERR_SCRIPT_NOT_FOUND = "Nie znaleziono pliku skryptu: {path}"
+# --- Script path errors (menu_app/paths.py) ---
+ERR_ABSOLUTE_DIR = "Directory in the configuration must be relative, found: {dir}"
+ERR_SCRIPT_OUTSIDE_BASE = "Script path escapes the base directory: {path}"
+ERR_SCRIPT_NOT_FOUND = "Script file not found: {path}"
 
-# --- Błędy kontraktu skryptu (menu_app/runner.py) ---
-ERR_NO_RUN_FUNCTION = "Skrypt nie definiuje funkcji run(ctx)"
-ERR_BAD_RETURN_VALUE = "run() powinno zwrócić int lub None"
-SCRIPT_NONZERO_CODE = "Skrypt zakończony kodem: {code}"
-ERR_MODULE_PREPARE = "Nie udało się przygotować pliku skryptu do wykonania: {path}"
+# --- Script contract errors (menu_app/runner.py) ---
+ERR_NO_RUN_FUNCTION = "The script does not define a run(ctx) function"
+ERR_BAD_RETURN_VALUE = "run() should return int or None"
+SCRIPT_NONZERO_CODE = "Script finished with code: {code}"
+ERR_MODULE_PREPARE = "Failed to prepare the script file for execution: {path}"
 
-# --- Komunikaty aplikacji (menu_app/app.py, main.py) ---
-SCRIPT_ERROR_WITH_CODE = "Błąd skryptu: {error} [kod wyjścia: {code}]"
-MSG_CONFIG_ERROR = "Błąd konfiguracji: {error}"
-MSG_NO_TTY = "stdin nie jest terminalem - aplikacja wymaga interaktywnej konsoli"
+# --- Application messages (menu_app/app.py, main.py) ---
+SCRIPT_ERROR_WITH_CODE = "Script error: {error} [exit code: {code}]"
+MSG_CONFIG_ERROR = "Configuration error: {error}"
+MSG_NO_TTY = "stdin is not a terminal - the application requires an interactive console"

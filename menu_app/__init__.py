@@ -1,5 +1,5 @@
-"""Konsolowe menu tekstowe sterowane plikiem konfiguracyjnym XML.
+"""XML-driven text console menu.
 
-Pakiet zawiera logikę (konfiguracja, nawigacja, runner skryptów)
-oraz cienką warstwę wejścia/wyjścia (klawiatura, terminal).
+The package contains the logic (configuration, navigation, script runner)
+and a thin input/output layer (keyboard, terminal).
 """

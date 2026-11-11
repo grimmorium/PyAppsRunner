@@ -1,173 +1,198 @@
-# Konsolowe menu w Pythonie sterowane XML (PyAppsRunner)
+# PyAppsRunner
 
-Aplikacja konsolowa wyświetlająca wielopoziomowe, tekstowe menu zbudowane z
-pliku `menu.xml` i uruchamiająca wskazane skrypty Pythona **w tym samym
-procesie**. Docelowa platforma: Linux; testowana także na Windows.
-Wymagania: Python >= 3.9, wyłącznie biblioteka standardowa (pytest tylko do testów).
+A console application that renders a **multi-level, text-based menu** from an XML file and runs the selected Python scripts **in the same process**. Target platform is Linux; it is also tested on Windows. It uses only the Python standard library (Python ≥ 3.9) — `pytest` is required for tests only.
 
-## Uruchomienie
+```
+Main Menu / Tools
+----------------------------------------
+> Exit-to-root demo
+  Advanced
+    ...
 
-```bash
-python main.py                 # menu z <katalog_aplikacji>/menu.xml
-python main.py --config ścieżka/do/menu.xml
-python main.py --base-dir KATALOG   # katalog bazowy dla ścieżek ze XML-a
-                                    # (domyślnie: katalog, w którym leży main.py)
+a - up | z - down | Enter - confirm
 ```
 
-Wymagana jest interaktywna konsola (stdin musi być terminalem). Przy przekierowanym
-stdin program kończy się z kodem 3 i komunikatem na stderr. Kody wyjścia:
-`0` - normalne zakończenie / Ctrl+C w menu, `2` - błąd konfiguracji XML,
-`3` - brak terminala interaktywnego.
+## Features
 
-## Uruchomienie testów
+- **XML-driven menu** — the whole tree (folders + scripts) is declared in `menu.xml`, with arbitrary nesting depth.
+- **In-process script execution** — scripts run via `importlib` inside the same process, so a simple contract (`run(ctx)`) and context passing are possible. A crashing script never takes the menu down with it.
+- **Cyclic navigation** — moving up from the first entry wraps to the last (and vice versa). Returning from a submenu restores the selection you had before entering it.
+- **System entries** — every list ends with `Exit` (main menu) or `Back` (submenus); these are not part of the XML.
+- **Path safety** — script paths must stay inside the base directory; absolute paths and `../` escapes are rejected.
+- **Cross-platform key handling** — lazy imports of `termios`/`tty` (POSIX) and `msvcrt` (Windows), so the shared modules import cleanly on both systems.
+- **Testable core** — keyboard, screen, script runner and pause are all injected, so the logic is fully testable without a real terminal.
+
+## Requirements
+
+- Python ≥ 3.9 (standard library only)
+- An interactive console (`stdin` must be a TTY). With redirected `stdin`, the program exits with code `3`.
+
+## Running the application
 
 ```bash
-pip install -r requirements-dev.txt   # instaluje pytest
-python -m pytest -q                   # pełny zestaw testów (TDD: każdy krok miał zielone)
+python main.py                          # menu from <app-dir>/menu.xml
+python main.py --config path/to/menu.xml
+python main.py --base-dir DIR           # base dir for script paths in the XML
+                                        # (default: directory containing main.py)
 ```
 
-Testy zależne od platformy (np. pseudoterminal `pty`) są pomijane na systemach,
-na których się nie wykonają (`pytest.mark.skipif`).
+### Command-line options
 
-## Klawisze
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--config PATH` | `<base-dir>/menu.xml` | Path to the XML menu file. |
+| `--base-dir DIR` | Directory of `main.py` | Base directory that all relative script paths in the XML are resolved against. |
 
-| Klawisz  | Działanie                                          |
-|----------|----------------------------------------------------|
-| `a`      | w górę (nawigacja cykliczna - z pierwszej pozycji na ostatnią) |
-| `z`      | w dół (cyklicznie)                                 |
-| `Enter`  | zatwierdź (wejście do podmenu / uruchom skrypt / wyjście) |
-| `Ctrl+C` | w menu: czyste zakończenie (kod 0); w trakcie skryptu: przerwanie i powrót do menu; podczas pauzy "Naciśnij Enter...": kończy tylko pauzę |
+### Exit codes
 
-Na końcu każdej listy jest pozycja systemowa: **Wyjście** w menu głównym,
-**Wstecz** w podmenu (nie pochodzi z XML). Powrót `Wstecz` przywraca zaznaczenie
-zapisane przed wejściem w podmenu. Pozostałe klawisze są ignorowane; sekwencje
-strzałek/ESC traktuje się jak "pozostałe".
+| Code | Meaning |
+|------|---------|
+| `0` | Normal exit, or `Ctrl+C` pressed while in a menu. |
+| `2` | XML configuration error (missing file, malformed XML, invalid element/attribute). |
+| `3` | `stdin` is not an interactive terminal and no key reader was injected. |
 
-## Format menu.xml
+## Keyboard controls
+
+| Key | Action |
+|-----|--------|
+| `a` / `A` | Move **up** (cyclic — from the first entry to the last). |
+| `z` / `Z` | Move **down** (cyclic). |
+| `Enter` | Confirm: enter a submenu, run a script, or exit. |
+| `Ctrl+C` | In a menu: clean exit (code 0). During a script: interrupt it and return to the menu. During the "Press Enter…" pause: ends only the pause. |
+
+Any other key is ignored; arrow-key / ESC escape sequences are treated as "other". The selected entry is always kept visible — long lists scroll with `...` indicators at the hidden edges.
+
+## Configuration format (`menu.xml`)
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<menu title="Menu główne">
-  <item name="Pozdrowienie" dir="scripts/basic" file="hello.py"/>
-  <folder name="Narzędzia">
-    <item name="Demo powrotu" dir="scripts/tools" file="exit_to_root_demo.py"/>
-    <folder name="Zaawansowane">
-      <item name="Test błędu" dir="scripts/basic" file="error_demo.py"/>
+<menu title="Main Menu">
+  <item name="Greeting" dir="scripts/basic" file="hello.py"/>
+  <folder name="Tools">
+    <item name="Exit-to-root demo" dir="scripts/tools" file="exit_to_root_demo.py"/>
+    <folder name="Advanced">
+      <item name="Error test" dir="scripts/basic" file="error_demo.py"/>
     </folder>
   </folder>
 </menu>
 ```
 
-Reguły:
+### Rules
 
-- element główny `<menu>`; atrybut `title` opcjonalny (domyślnie "Menu główne");
-- `<item name dir file/>` - wszystkie trzy atrybuty wymagane i niepuste,
-  `<item>` nie może mieć dzieci, `file` musi kończyć się na `.py` (bez rozróżniania wielkości liter);
-- `<folder name>` może zawierać foldery i itemy w dowolnej głębokości; pusty folder dozwolony;
-- kolejność elementów XML = kolejność pozycji menu;
-- `dir` jest ścieżką względną względem katalogu bazowego (dopuszczany separator `\`,
-  zamieniany na `/`); wynik musi leżeć wewnątrz katalogu bazowego (ochrona przed `../`);
-- nieznane elementy = błąd konfiguracji, nieznane atrybuty są ignorowane;
-- komunikaty błędów zawierają numer linii, gdy jest dostępny.
+- The root element is `<menu>`; the `title` attribute is optional (defaults to `"Main Menu"`).
+- `<item name dir file/>` — all three attributes are required and non-empty. An `<item>` cannot have children, and `file` must end in `.py` (case-insensitive).
+- `<folder name>` may contain folders and items at any depth; an empty folder is allowed.
+- Element order in the XML = entry order in the menu.
+- `dir` is a path **relative to the base directory** (`\` separators are accepted and normalized to `/`). The resolved result must stay inside the base directory (protection against `../`).
+- Unknown elements are a configuration error; unknown attributes are ignored.
+- Error messages include the line number when it can be determined.
 
-Istnienie pliku skryptu sprawdzane jest w momencie uruchomienia (nie przy wczytywaniu
-XML) - menu działa mimo brakującego skryptu, użytkownik dostaje komunikat po wyborze pozycji.
+> A script file's existence is checked **at run time**, not while reading the XML — so the menu still works if a script is missing, and you get an error message only after selecting that entry.
 
-## Kontrakt wywoływanego skryptu
+## Script contract
 
-Skrypt to zwykły plik `.py` zawierający funkcję na poziomie modułu:
+A script is an ordinary `.py` file containing a module-level function:
 
 ```python
 def run(ctx) -> int | None:
     ...
 ```
 
-1. **Wartość zwracana:** `None` lub `0` = sukces; inna liczba całkowita = błąd
-   (menu pokaże kod). Wartości nie-całkowite (np. tekst, bool) to naruszenie kontraktu.
-2. **Powrót do menu** = zwykłe zakończenie `run()`. Dopuszczalne także:
-   `sys.exit(n)` (traktowane jak `return n`) oraz `Ctrl+C` (anulowanie - traktowane
-   jako "Przerwano.", nie jest błędem).
-3. Kod na poziomie modułu poza `run()` powinien być bez efektów ubocznych
-   (import ma być czysty); każde uruchomienie to świeże wykonanie pliku
-   (moduł jest usuwany z `sys.modules` po zakończeniu).
-4. Skrypt używa zwykłych `print()` / `input()` - terminal jest w trybie normalnym;
-   wyjątki skryptu są łapane (traceback na stderr) i nie wyłączają menu.
-5. Katalog skryptu jest na czas działania dodawany do początku `sys.path`
-   (skrypt może importować moduły leżące obok siebie). Skrypt NIE zmienia
-   katalogu roboczego procesu.
+1. **Return value:** `None` or `0` = success; any other integer = error (the menu shows the code). Non-integer values (e.g. text, bool) are a contract violation.
+2. **Returning to the menu** is simply finishing `run()`. Also allowed: `sys.exit(n)` (treated as `return n`) and `Ctrl+C` (an interruption — reported as "Interrupted.", not an error).
+3. Module-level code outside `run()` should be side-effect free (importing must be clean); every run is a fresh execution of the file (the module is removed from `sys.modules` afterwards).
+4. A script uses ordinary `print()` / `input()` — the terminal is in normal mode; its exceptions are caught (traceback on stderr) and never shut down the menu.
+5. The script's directory is added to the front of `sys.path` for the duration of the run, so it can import sibling modules. A script does **not** change the process working directory.
 
-Minimalny szablon:
+Minimal template:
 
 ```python
 def run(ctx):
-    print("Moja akcja")
+    print("My action")
     return 0
 ```
 
-### Kontekst `ctx` (dataclass `ScriptContext`)
+### The `ctx` context (`ScriptContext` dataclass)
 
-| Pole | Znaczenie |
-|------|-----------|
-| `base_dir: Path` | katalog bazowy aplikacji |
-| `script_path: Path` | pełna ścieżka uruchamianego pliku |
-| `script_dir: Path` | katalog, w którym leży skrypt |
-| `menu_path: tuple[str, ...]` | nazwy folderów prowadzących do pozycji (bez roota), np. `("Narzędzia", "Zaawansowane")` |
-| `skip_pause: bool = False` | `True` -> po skrypcie nie ma pauzy "Naciśnij Enter..." |
+| Field | Meaning |
+|-------|---------|
+| `base_dir: Path` | Application base directory. |
+| `script_path: Path` | Full path of the file being run. |
+| `script_dir: Path` | Directory containing the script. |
+| `menu_path: tuple[str, ...]` | Folder names leading to the entry (without root), e.g. `("Tools", "Advanced")`. |
+| `skip_pause: bool = False` | `True` → no "Press Enter…" pause after the script. |
 
-Metody:
+Methods:
 
-- `ctx.exit_to_root()` - po zakończeniu menu wraca do menu głównego (zamiast na poziom, z którego uruchomiono skrypt);
-- `ctx.pause(message=...)` - pauza dla użytkownika w trakcie skryptu (`input`; EOF ignorowany).
+- `ctx.exit_to_root()` — after finishing, the menu returns to the **main** menu instead of the level that launched the script.
+- `ctx.pause(message=...)` — a user-facing pause mid-script (`input`; EOF is ignored).
 
-Po zakończeniu skryptu program pokazuje "Naciśnij Enter, aby wrócić do menu"
-(chyba że `skip_pause=True`) i wraca na ten sam poziom z tym samym zaznaczeniem.
+After a script finishes (unless `skip_pause=True`) the program shows "Press Enter to return to the menu" and comes back to the same level with the same selection. A pause also follows errors (missing file, path outside base, failing script) so you have time to read the message.
 
-## Przykładowe skrypty
+## Sample scripts
 
-- `scripts/basic/hello.py` - powitanie + wypisanie kontekstu;
-- `scripts/basic/error_demo.py` - celowy wyjątek (demonstracja obsługi błędów);
-- `scripts/tools/exit_to_root_demo.py` - demonstracja `ctx.exit_to_root()`.
+- `scripts/basic/hello.py` — greeting + prints its context;
+- `scripts/basic/error_demo.py` — raises a deliberate exception (demonstrates error handling);
+- `scripts/tools/exit_to_root_demo.py` — demonstrates `ctx.exit_to_root()`.
 
-## Decyzje projektowe
+## Project structure
 
-### Ze specyfikacji (Krok 0)
+```
+PyAppsRunner/
+├── main.py                  # entry point (thin, arguments only)
+├── menu.xml                 # sample configuration
+├── requirements-dev.txt     # contains: pytest
+├── App_desc.txt             # original step-by-step specification
+├── menu_app/
+│   ├── __init__.py
+│   ├── texts.py             # UI text constants (single source of user-facing strings)
+│   ├── config.py            # data model + XML parser + validation
+│   ├── paths.py             # script path resolution & safety checks
+│   ├── script_api.py        # ScriptContext (the script contract)
+│   ├── runner.py            # loading and running scripts in-process
+│   ├── navigator.py         # navigation state (no I/O)
+│   ├── renderer.py          # screen text building (no I/O)
+│   ├── keys.py              # key reading (Linux/Windows, lazy imports)
+│   ├── terminal.py          # screen clearing, ANSI, window size
+│   ├── app.py               # main loop (ties everything together)
+│   └── testing.py           # FakeKeyReader for tests
+├── scripts/                 # sample scripts
+│   ├── basic/hello.py
+│   ├── basic/error_demo.py
+│   └── tools/exit_to_root_demo.py
+└── tests/                   # pytest suite (TDD — every step kept it green)
+```
 
-1. Katalog bazowy = katalog `main.py`; nadpisywalny przez `--base-dir`.
-2. Nawigacja cykliczna w górę i w dół.
-3. Pozycje systemowe: "Wyjście" (root) / "Wstecz" (podmenu), zawsze na końcu listy.
-4. Skrypty uruchamiane w tym samym procesie (`importlib`); błędy skryptu nie wyłączają menu.
-5. Po skrypcie powrót na poziom, z którego go uruchomiono; opcjonalnie `ctx.exit_to_root()`.
-6. Pauza "Naciśnij Enter..." po skrypcie, chyba że `skip_pause=True`.
-7. Ctrl+C w menu = czyste wyjście (kod 0); Ctrl+C w skrypcie = przerwanie i powrót do menu.
+## Running the tests
 
-### Własne decyzje agenta
+```bash
+pip install -r requirements-dev.txt   # installs pytest
+python -m pytest -q                   # full test suite
+```
 
-1. **bool jako wartość zwracana** - traktowany jak naruszenie kontraktu
-   (`run() powinno zwrócić int lub None`), mimo że `True/False` są podtypami `int` w Pythonie;
-   analogicznie przy `sys.exit(True)` kod wynosi 1.
-2. **Numery linii w błędach XML** - parser (ElementTree) nie udostępnia numera linii dla
-   błędów semantycznych, więc nadbudowano nad nim śledzenie: skanowanie surowego tekstu
-   regexem + podklasa `ET.TreeBuilder` zapisująca linię rozpoczęcia każdego tagu.
-   Komunikaty kończą się przyrostkiem ", linia N"; gdy numer jest niedostępny - bez niego.
-3. **Pauza także po błędach** (błąd uruchomienia skryptu, brak pliku, ścieżka poza bazą)
-   - żeby użytkownik zdążył przeczytać komunikat; pomijana tylko przy `skip_pause=True`
-   (ustawianym przez sam skrypt, więc nie dotyczy błędów przed jego wykonaniem).
-4. **Ctrl+C / EOF podczas pauzy** kończy tylko pauzę i wraca do menu (nie zabija aplikacji).
-5. **Klawisze OTHER są ignorowane** - ekran jest przerysowywany, ale stan się nie zmienia;
-   sekwencje ucieczki (strzałki) też mapują na OTHER.
-6. **Renderer:** okno pozycji = `max(1, height - 5)` linii; gdy lista nie mieści się w
-   oknie, ukryte strony oznaczają wiersze "  ..."; dla bardzo małych okien (width < 10,
-   height < 6) brak wyjątków - wyświetlany jest co najmniej jeden wiersz pozycji.
-7. **`FakeKeyReader`** znajduje się w `menu_app/testing.py` (dozwolone przez specyfikację:
-   "w tests/ lub w menu_app/testing.py") - poza katalogiem testów, bo to część interfejsu DI;
-   po wyczerpaniu listy rzuca `AssertionError`, zabezpieczając testy przed pętlą nieskończoną.
-8. **Dodatkowy plik `tests/test_smoke.py`** - minimalny test importów wymagany przez
-   Definition of Done Kroku 1 (zbiór testów musi być zbieralny, gdy logika jeszcze nie istnieje).
-9. **Kody wyjścia z `main()`:** 2 = błąd konfiguracji XML, 3 = stdin nie jest terminalem
-   i nie wstrzyknięto czytnika klawiszy (np. uruchomienie pod CI bez TTY).
-10. **Windows:** stdout przełączany na UTF-8 (`reconfigure`, gdy metoda dostępna),
-    kody ANSI włączane przez `SetConsoleMode` (ctypes); przy przekierowanym stdout
-    niepowodzenie jest cicho ignorowane. Na POSIX `enable_ansi()` nic nie robi.
-11. **Nazwa modułu skryptu** = `menu_script_<sha256(ścieżki)[:16]>` - unikalna dla pliku,
-    dzięki czemu dwa różne skrypty o tej samej nazwie w różnych katalogach nie kolizują;
-    po każdym uruchomieniu moduł jest usuwany z `sys.modules`.
+Platform-dependent tests (e.g. the POSIX pseudoterminal `pty` ones) are skipped on systems where they cannot run (`pytest.mark.skipif`).
+
+## Design decisions
+
+From the specification:
+
+1. Base directory = the directory of `main.py`; overridable via `--base-dir`.
+2. Cyclic navigation up and down.
+3. System entries `Exit` (root) / `Back` (submenus), always at the end of a list.
+4. Scripts run in the same process (`importlib`); script errors never shut down the menu.
+5. After a script, return to the level that launched it; optionally `ctx.exit_to_root()`.
+6. "Press Enter…" pause after a script unless `skip_pause=True`.
+7. `Ctrl+C` in a menu = clean exit (code 0); `Ctrl+C` in a script = interrupt and return to the menu.
+
+Additional implementation decisions:
+
+1. **Bool as a return value** is treated as a contract violation (`run() should return int or None`) even though `True/False` are `int` subclasses; likewise `sys.exit(True)` yields code 1.
+2. **Line numbers in XML errors** — ElementTree does not expose line numbers for semantic errors, so a raw-text scan plus an `ET.TreeBuilder` subclass records where each tag starts. Messages end with ", line N" when available.
+3. **Pause after errors too** (run failure, missing file, path outside base) so the user can read the message; skipped only via `skip_pause=True`, which a script sets itself and therefore does not apply to pre-run errors.
+4. **`Ctrl+C` / EOF during a pause** ends only the pause and returns to the menu (it never kills the app).
+5. **OTHER keys are ignored** — the screen is redrawn but state is unchanged; escape sequences map to OTHER as well.
+6. **Renderer viewport** = `max(1, height - 5)` lines; hidden sides are marked with a `...` row; very small windows (width < 10, height < 6) never raise — at least one entry line is shown.
+7. **`FakeKeyReader`** lives in `menu_app/testing.py`; once its key list is exhausted it raises `AssertionError`, guarding tests against an infinite loop.
+8. **Exit codes from `main()`:** 2 = XML configuration error, 3 = `stdin` is not a terminal and no key reader was injected (e.g. running under CI without a TTY).
+9. **Windows:** stdout is switched to UTF-8 (`reconfigure`, when available) and ANSI codes are enabled via `SetConsoleMode` (ctypes); failure with redirected stdout is silently ignored. On POSIX, `enable_ansi()` is a no-op.
+10. **Script module name** = `menu_script_<sha256(path)[:16]>` — unique per file so two scripts with the same filename in different directories never collide; the module is removed from `sys.modules` after every run.

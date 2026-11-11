@@ -1,10 +1,10 @@
-"""Przykładowy skrypt demonstrujący błąd.
+"""Sample script demonstrating an error.
 
-Menu powinno pokazać komunikat o błędzie (z kodem wyjścia) i pozostać
-w pełni działające - wyjątki skrypty nie propagują się do menu.
+The menu should show an error message (with the exit code) and remain
+fully functional - script exceptions do not propagate to the menu.
 """
 
 
 def run(ctx):
-    """Rzuca celowy wyjątek w celu demonstracji obsługi błędów."""
-    raise RuntimeError("Celowy błąd demonstracyjny")
+    """Raises a deliberate exception to demonstrate error handling."""
+    raise RuntimeError("Intentional demo error")

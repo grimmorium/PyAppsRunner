@@ -1,8 +1,8 @@
-"""Pętla główna aplikacji łącząca nawigację, renderer i runner (Krok 8).
+"""Application main loop tying together navigation, renderer and runner (Step 8).
 
-Logika jest odseparowana od I/O: czytnik klawiszy, strumień wyjścia,
-uruchamianie skryptów oraz pauza są wstrzykiwane w konstruktorze. Błędy
-ścieżek i błędy uruchomienia nigdy nie przerywają pętli menu.
+Logic is separated from I/O: the key reader, output stream, script runner
+and pause are injected via the constructor. Path errors and run errors
+never break the menu loop.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from .texts import PRESS_ENTER, SCRIPT_ERROR_WITH_CODE
 
 
 class App:
-    """Pętla główna: rysuje ekran -> czyta klawisz -> wykonuje akcję."""
+    """Main loop: draw the screen -> read a key -> perform the action."""
 
     def __init__(
         self,
@@ -45,7 +45,7 @@ class App:
         self._clear = clear
 
     def run(self) -> int:
-        """Uruchamia pętlę główną; zwraca kod wyjścia (0 = normalne zakończenie)."""
+        """Starts the main loop; returns the exit code (0 = normal exit)."""
         while True:
             self._draw()
             key = self._key_reader.read_key()
@@ -65,7 +65,7 @@ class App:
                     self._run_script_action(action)
 
     def _draw(self) -> None:
-        """Czyści ekran i wypisuje bieżący widok menu."""
+        """Clears the screen and prints the current menu view."""
         width, height = self._size_provider()
         labels: List[str] = [entry.label for entry in self._nav.entries()]
         screen = render_screen(
@@ -81,7 +81,7 @@ class App:
         self._out.flush()
 
     def _wait_for_enter(self) -> None:
-        """Pauza po skrypcie/błędzie; EOF i Ctrl+C kończą tylko pauzę."""
+        """Pause after a script/error; EOF and Ctrl+C end only the pause."""
         print(PRESS_ENTER, file=self._out)
         try:
             self._pause_fn()
@@ -89,7 +89,7 @@ class App:
             pass
 
     def _run_script_action(self, action: RunScript) -> None:
-        """Rozwiązuje ścieżkę, uruchamia skrypt i raportuje wynik w menu."""
+        """Resolves the path, runs the script and reports the result in the menu."""
         try:
             script_path = resolve_script_path(self._base_dir, action.item)
         except (ConfigError, ScriptNotFoundError) as exc:

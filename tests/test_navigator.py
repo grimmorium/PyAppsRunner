@@ -1,4 +1,4 @@
-"""Testy stanu nawigacji menu - czysta logika bez I/O (Krok 5 specyfikacji)."""
+"""Tests of the menu navigation state - pure logic without I/O (Step 5 of the specification)."""
 
 from menu_app.config import Folder, ScriptItem
 from menu_app.navigator import EntryKind, Navigator, Quit, RunScript, Stay
@@ -10,16 +10,16 @@ def item(name: str) -> ScriptItem:
 
 
 ROOT = Folder(
-    name="Menu główne",
+    name="Main Menu",
     children=(
         item("Alfa"),
         item("Beta"),
         Folder(
-            name="Narzędzia",
+            name="Tools",
             children=(
                 item("Gamma"),
                 item("Delta"),
-                Folder(name="Głęboko", children=(item("Epsilon"),)),
+                Folder(name="Deep", children=(item("Epsilon"),)),
             ),
         ),
     ),
@@ -37,7 +37,7 @@ def test_root_entries_end_with_exit() -> None:
 def test_submenu_entries_end_with_back() -> None:
     nav = Navigator(ROOT)
     nav.move_down()
-    nav.move_down()  # na "Narzędzia" (indeks 2)
+    nav.move_down()  # onto "Tools" (index 2)
     action = nav.activate()
     assert isinstance(action, Stay)
     entries = nav.entries()
@@ -47,78 +47,78 @@ def test_submenu_entries_end_with_back() -> None:
 
 def test_position_restored_after_back_at_three_levels() -> None:
     nav = Navigator(ROOT)
-    # root: 0=Alfa 1=Beta 2=Narzędzia 3=Wyjście
+    # root: 0=Alfa 1=Beta 2=Tools 3=Exit
     nav.move_down()
     nav.move_down()
-    assert isinstance(nav.activate(), Stay)          # wchodzimy do Narzędzi (idx 2 zapamiętany)
-    assert nav.breadcrumb() == ("Narzędzia",)
+    assert isinstance(nav.activate(), Stay)          # enter Tools (idx 2 remembered)
+    assert nav.breadcrumb() == ("Tools",)
     assert nav.selected_index() == 0
-    # Narzędzia: 0=Gamma 1=Delta 2=Głęboko 3=Wstecz
+    # Tools: 0=Gamma 1=Delta 2=Deep 3=Back
     nav.move_down()
-    nav.move_down()                                  # na Głęboko (idx 2)
-    assert isinstance(nav.activate(), Stay)          # wchodzimy do Głęboko
-    assert nav.breadcrumb() == ("Narzędzia", "Głęboko")
-    # Głęboko: 0=Epsilon 1=Wstecz -> wracamy
+    nav.move_down()                                  # onto Deep (idx 2)
+    assert isinstance(nav.activate(), Stay)          # enter Deep
+    assert nav.breadcrumb() == ("Tools", "Deep")
+    # Deep: 0=Epsilon 1=Back -> go back
     nav.move_down()
-    assert isinstance(nav.activate(), Stay)          # Wstecz do Narzędzi
-    assert nav.breadcrumb() == ("Narzędzia",)
-    assert nav.selected_index() == 2                 # pozycja przywrócona!
-    # z powrotem do roota
-    nav.move_down()                                  # na Wstecz (idx 3)
-    assert isinstance(nav.activate(), Stay)          # Wstecz do roota
+    assert isinstance(nav.activate(), Stay)          # Back to Tools
+    assert nav.breadcrumb() == ("Tools",)
+    assert nav.selected_index() == 2                 # position restored!
+    # back to root
+    nav.move_down()                                  # onto Back (idx 3)
+    assert isinstance(nav.activate(), Stay)          # Back to root
     assert nav.breadcrumb() == ()
-    assert nav.selected_index() == 2                 # pozycja w root przywrócona
+    assert nav.selected_index() == 2                 # root position restored
 
 
 def test_cyclic_movement_up_and_down() -> None:
     nav = Navigator(ROOT)
     count = len(nav.entries())
     nav.move_up()
-    assert nav.selected_index() == count - 1         # z pierwszego na ostatnie
+    assert nav.selected_index() == count - 1         # from the first to the last
     nav.move_down()
-    assert nav.selected_index() == 0                 # i z powrotem
+    assert nav.selected_index() == 0                 # and back
 
 
 def test_empty_folder_contains_only_back() -> None:
-    root = Folder(name="r", children=(Folder(name="Pusty", children=()),))
+    root = Folder(name="r", children=(Folder(name="Empty", children=()),))
     nav = Navigator(root)
-    nav.activate()                                   # wchodzimy do pustego folderu
+    nav.activate()                                   # enter the empty folder
     entries = nav.entries()
     assert [e.kind for e in entries] == [EntryKind.BACK]
     assert nav.selected_index() == 0
-    # cykliczność na liście jednoelementowej nie rzuca wyjątkiem
+    # cyclic movement on a one-element list does not raise
     nav.move_up()
     nav.move_down()
     assert nav.selected_index() == 0
 
 
 def test_root_without_children_has_only_exit() -> None:
-    nav = Navigator(Folder(name="puste", children=()))
+    nav = Navigator(Folder(name="empty", children=()))
     entries = nav.entries()
     assert [e.kind for e in entries] == [EntryKind.EXIT]
 
 
 def test_breadcrumb_and_title() -> None:
     nav = Navigator(ROOT)
-    assert nav.title() == "Menu główne"
+    assert nav.title() == "Main Menu"
     assert nav.breadcrumb() == ()
     nav.move_down()
     nav.move_down()
-    nav.activate()                                   # Narzędzia
+    nav.activate()                                   # Tools
     nav.move_down()
     nav.move_down()
-    nav.activate()                                   # Głęboko
-    assert nav.breadcrumb() == ("Narzędzia", "Głęboko")
+    nav.activate()                                   # Deep
+    assert nav.breadcrumb() == ("Tools", "Deep")
 
 
 def test_go_root_from_deep_level() -> None:
     nav = Navigator(ROOT)
     nav.move_down()
     nav.move_down()
-    nav.activate()                                   # Narzędzia (idx 2 w root)
+    nav.activate()                                   # Tools (idx 2 in root)
     nav.move_down()
-    nav.move_down()                                  # na Głęboko (idx 2)
-    nav.activate()                                   # wchodzimy do Głęboko
+    nav.move_down()                                  # onto Deep (idx 2)
+    nav.activate()                                   # enter Deep
     assert len(nav.breadcrumb()) == 2
     nav.go_root()
     assert nav.breadcrumb() == ()
@@ -126,37 +126,37 @@ def test_go_root_from_deep_level() -> None:
 
 
 def test_run_script_action_carries_menu_path() -> None:
-    # skrypt w root -> menu_path puste
+    # script in root -> empty menu_path
     nav = Navigator(ROOT)
     action = nav.activate()                          # Alfa (idx 0)
     assert isinstance(action, RunScript)
     assert action.item.name == "Alfa"
     assert action.menu_path == ()
-    # stan nawigacji się nie zmienia po aktywnym skrypcie
+    # navigation state does not change after an active script
     assert nav.breadcrumb() == ()
 
-    # skrypt w podfolderze -> pełna ścieżka folderów
+    # script in a subfolder -> full folder path
     nav2 = Navigator(ROOT)
     nav2.move_down()
     nav2.move_down()
-    nav2.activate()                                  # Narzędzia (selekcja 0 = Gamma)
+    nav2.activate()                                  # Tools (selection 0 = Gamma)
     action2 = nav2.activate()
     assert isinstance(action2, RunScript)
     assert action2.item.name == "Gamma"
-    assert action2.menu_path == ("Narzędzia",)
+    assert action2.menu_path == ("Tools",)
 
 
 def test_quit_only_from_exit() -> None:
     nav = Navigator(ROOT)
-    # w podmenu ostatnia pozycja to Wstecz - nie może zwrócić Quit
+    # in a submenu the last entry is Back - it must not return Quit
     nav.move_down()
     nav.move_down()
-    nav.activate()                                   # Narzędzia (selekcja wraca do 0)
-    for _ in range(len(nav.entries()) - 1):          # na koniec listy (Wstecz, idx 3)
+    nav.activate()                                   # Tools (selection returns to 0)
+    for _ in range(len(nav.entries()) - 1):          # to the end of the list (Back, idx 3)
         nav.move_down()
-    assert isinstance(nav.activate(), Stay)          # Wstecz, nie Quit
-    assert nav.breadcrumb() == ()                    # wróciliśmy do roota
-    assert nav.selected_index() == 2                 # pozycja w root przywrócona
-    # tylko EXIT w root daje Quit (ostatnia pozycja, idx 3)
+    assert isinstance(nav.activate(), Stay)          # Back, not Quit
+    assert nav.breadcrumb() == ()                    # we are back at root
+    assert nav.selected_index() == 2                 # root position restored
+    # only EXIT in root gives Quit (last entry, idx 3)
     nav.move_down()
     assert isinstance(nav.activate(), Quit)

@@ -1,9 +1,9 @@
-"""Przykładowy skrypt powitalny - spełnia kontrakt run(ctx) z dokumentacji."""
+"""Sample greeting script - fulfills the run(ctx) contract from the documentation."""
 
 
 def run(ctx):
-    """Wypisuje powitanie oraz kontekst, w jakim skrypt został uruchomiony."""
-    print("Witaj!")
-    print(f"Ścieżka w menu: {ctx.menu_path}")
-    print(f"Plik skryptu: {ctx.script_path}")
+    """Prints a greeting and the context in which the script was launched."""
+    print("Hello!")
+    print(f"Menu path: {ctx.menu_path}")
+    print(f"Script file: {ctx.script_path}")
     return 0

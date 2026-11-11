@@ -1,4 +1,4 @@
-"""Testy kontraktu skryptu i runnera (Krok 4 specyfikacji)."""
+"""Tests of the script contract and runner (Step 4 of the specification)."""
 
 import sys
 from pathlib import Path
@@ -46,12 +46,12 @@ def test_run_returns_nonzero_is_error(tmp_path: Path) -> None:
 
 
 def test_missing_run_function(tmp_path: Path) -> None:
-    result = run(tmp_path, "WARTOSCIOWANIE_MODULU = 1\n")
+    result = run(tmp_path, "MODULE_LEVEL_VALUE = 1\n")
     assert result.ok is False
     assert result.error == ERR_NO_RUN_FUNCTION
 
 
-@pytest.mark.parametrize("bad_run", ['run = "to nie funkcja"', "run = 42"])
+@pytest.mark.parametrize("bad_run", ['run = "not a function"', "run = 42"])
 def test_run_not_callable(tmp_path: Path, bad_run: str) -> None:
     result = run(tmp_path, f"{bad_run}\n")
     assert result.ok is False
@@ -59,8 +59,8 @@ def test_run_not_callable(tmp_path: Path, bad_run: str) -> None:
 
 
 def test_exception_in_run_does_not_kill_menu(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    source = "def run(ctx):\n    raise RuntimeError('coś poszło nie tak')\n"
-    result = run(tmp_path, source)  # nie może rzucić wyjątku
+    source = "def run(ctx):\n    raise RuntimeError('something went wrong')\n"
+    result = run(tmp_path, source)  # must not raise
     assert result.ok is False
     assert result.return_code == 1
     assert "RuntimeError" in (result.error or "")
@@ -76,7 +76,7 @@ def test_import_time_syntax_error(tmp_path: Path, capsys: pytest.CaptureFixture[
 
 
 def test_import_time_module_level_error(tmp_path: Path) -> None:
-    source = 'import nieistniejacy_modul_xyz123\n\ndef run(ctx):\n    return 0\n'
+    source = 'import nonexistent_module_xyz123\n\ndef run(ctx):\n    return 0\n'
     result = run(tmp_path, source)
     assert result.ok is False
     assert "ModuleNotFoundError" in (result.error or "")
@@ -87,7 +87,7 @@ def test_import_time_module_level_error(tmp_path: Path) -> None:
     [
         ("import sys\n\ndef run(ctx):\n    sys.exit(0)\n", 0),
         ("import sys\n\ndef run(ctx):\n    sys.exit(5)\n", 5),
-        ('import sys\n\ndef run(ctx):\n    sys.exit("tekst")\n', 1),
+        ('import sys\n\ndef run(ctx):\n    sys.exit("text")\n', 1),
     ],
 )
 def test_system_exit_variants(tmp_path: Path, source: str, expected_code: int) -> None:
@@ -100,7 +100,7 @@ def test_keyboard_interrupt_in_run_is_not_error(tmp_path: Path, capsys: pytest.C
     result = run(tmp_path, "def run(ctx):\n    raise KeyboardInterrupt\n")
     assert result.ok is True
     assert result.error is None
-    assert "Przerwano" in capsys.readouterr().out
+    assert "Interrupted" in capsys.readouterr().out
 
 
 def test_exit_to_root_flag_copied(tmp_path: Path) -> None:
@@ -148,15 +148,15 @@ def test_script_dir_first_on_sys_path_during_run(tmp_path: Path) -> None:
 
 
 def test_sibling_module_import_works(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    (tmp_path / "helper_mod.py").write_text('WARTOSC = "pomocnik-dziala"\n', encoding="utf-8")
-    source = "import helper_mod\n\ndef run(ctx):\n    print(helper_mod.WARTOSC)\n    return 0\n"
+    (tmp_path / "helper_mod.py").write_text('VALUE = "helper works"\n', encoding="utf-8")
+    source = "import helper_mod\n\ndef run(ctx):\n    print(helper_mod.VALUE)\n    return 0\n"
     result = run(tmp_path, source)
     assert result.ok is True
-    assert "pomocnik-dziala" in capsys.readouterr().out
+    assert "helper works" in capsys.readouterr().out
 
 
 def test_two_runs_execute_fresh_module_state(tmp_path: Path) -> None:
-    # zmienna modułu nie może zostać zachowana między uruchomieniami
+    # a module variable must not be preserved between runs
     source = (
         "RUNS = 0\n"
         "\n"
@@ -173,8 +173,8 @@ def test_two_runs_execute_fresh_module_state(tmp_path: Path) -> None:
 
 
 def test_script_stdout_visible(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    source = 'def run(ctx):\n    print("Hello ze skryptu")\n    return 0\n'
+    source = 'def run(ctx):\n    print("Hello from the script")\n    return 0\n'
     result = run(tmp_path, source)
     assert result.ok is True
     out = capsys.readouterr().out
-    assert "Hello ze skryptu" in out
+    assert "Hello from the script" in out

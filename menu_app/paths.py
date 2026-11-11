@@ -1,7 +1,7 @@
-"""Rozwiązywanie ścieżek skryptów względem katalogu bazowego (Krok 3).
+"""Resolving script paths relative to the base directory (Step 3).
 
-Sprawdzanie istnienia pliku następuje w momencie uruchomienia, a nie przy
-wczytywaniu XML - menu działa mimo brakującego skryptu.
+File existence is checked at run time, not when reading the XML - the menu
+works even if a script is missing.
 """
 
 from __future__ import annotations
@@ -14,17 +14,18 @@ from .texts import ERR_ABSOLUTE_DIR, ERR_SCRIPT_NOT_FOUND, ERR_SCRIPT_OUTSIDE_BA
 
 
 class ScriptNotFoundError(Exception):
-    """Brak pliku skryptu w momencie uruchamiania (komunikat zawiera ścieżkę)."""
+    """Script file missing at launch time (message includes the path)."""
 
 
 _DRIVE_LETTER_RE = re.compile(r"^[A-Za-z]:")
 
 
 def resolve_script_path(base_dir: Path, item: ScriptItem) -> Path:
-    """Zwraca rozwiązaną absolutną ścieżkę do pliku skryptu.
+    """Returns the resolved absolute path to the script file.
 
-    Reguły: separator "\" w ``dir`` zamieniany na "/", katalog musi być
-    relatywny, wynik musi leżeć wewnątrz base_dir (ochrona przed "../../").
+    Rules: the "\\" separator in ``dir`` is replaced with "/", the directory
+    must be relative, and the result must lie inside base_dir (protection
+    against "../../").
     """
     base = Path(base_dir).resolve()
     directory = item.directory.replace("\\", "/")

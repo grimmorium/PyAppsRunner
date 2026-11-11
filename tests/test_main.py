@@ -1,7 +1,7 @@
-"""Testy punktu wejścia main() - argv, kody wyjścia i komunikaty błędów (Krok 9).
+"""Tests of the main() entry point - argv, exit codes and error messages (Step 9).
 
-Konfiguracja ładowana jest z pliku tymczasowego; czytnik klawiszy wstrzykiwany
-jest parametrem, więc testy nie wymagają prawdziwego terminala.
+The configuration is loaded from a temporary file; the key reader is injected
+as a parameter, so the tests do not require a real terminal.
 """
 
 import io
@@ -21,45 +21,45 @@ def _write_config(tmp_path: Path, content: str) -> Path:
 
 
 def test_invalid_xml_returns_2_with_message(tmp_path: Path, capsys) -> None:
-    cfg = _write_config(tmp_path, "<menu><folder name='x'></menu>")  # niezbalansowane tagi
+    cfg = _write_config(tmp_path, "<menu><folder name='x'></menu>")  # unbalanced tags
     rc = main(["--config", str(cfg), "--base-dir", str(tmp_path)])
     err = capsys.readouterr().err
     assert rc == 2
-    assert "Błąd konfiguracji" in err
+    assert "Configuration error" in err
 
 
 def test_missing_config_returns_2_with_message(tmp_path: Path, capsys) -> None:
-    missing = tmp_path / "brak.xml"
+    missing = tmp_path / "missing.xml"
     rc = main(["--config", str(missing), "--base-dir", str(tmp_path)])
     err = capsys.readouterr().err
     assert rc == 2
-    assert "Plik konfiguracyjny nie istnieje" in err
+    assert "Configuration file does not exist" in err
 
 
 def test_default_config_path_is_base_dir_menu_xml(tmp_path: Path, capsys) -> None:
-    # bez --config odczytujemy <base-dir>/menu.xml (tu go brak -> kod 2)
+    # without --config we read <base-dir>/menu.xml (missing here -> code 2)
     rc = main(["--base-dir", str(tmp_path)])
     err = capsys.readouterr().err
     assert rc == 2
-    assert "Plik konfiguracyjny nie istnieje" in err
+    assert "Configuration file does not exist" in err
 
 
 def test_no_tty_without_injected_reader_returns_3(tmp_path: Path, capsys) -> None:
-    cfg = _write_config(tmp_path, VALID_EMPTY_MENU)  # poprawna konfiguracja -> docieramy do checku TTY
+    cfg = _write_config(tmp_path, VALID_EMPTY_MENU)  # valid configuration -> we reach the TTY check
     rc = main(["--config", str(cfg), "--base-dir", str(tmp_path)])
     err = capsys.readouterr().err
     assert rc == 3
-    assert "stdin nie jest terminalem" in err
+    assert "stdin is not a terminal" in err
 
 
 def test_injected_reader_runs_empty_menu_to_exit_zero(tmp_path: Path) -> None:
     cfg = _write_config(tmp_path, VALID_EMPTY_MENU)
     out = io.StringIO()
-    # puste menu = pojedyncza pozycja systemowa "Wyjście" (zaznaczona od początku)
+    # an empty menu = a single system entry "Exit" (selected from the start)
     rc = main(
         ["--config", str(cfg), "--base-dir", str(tmp_path)],
         key_reader=FakeKeyReader([Key.ENTER]),
         out=out,
     )
     assert rc == 0
-    assert "Wyjście" in out.getvalue()
+    assert "Exit" in out.getvalue()

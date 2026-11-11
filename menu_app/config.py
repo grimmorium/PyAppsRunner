@@ -1,7 +1,7 @@
-"""Model danych i parser pliku konfiguracyjnego XML (Krok 2 specyfikacji).
+"""Data model and XML configuration file parser (Step 2 of the specification).
 
-Format: <menu title="..."> z dowolnie zagnieżdżonymi <folder> oraz
-liśćmi <item name dir file/>. Kolejność w XML = kolejność w menu.
+Format: <menu title="..."> with arbitrarily nested <folder> elements and
+leaf <item name dir file/> entries. Order in the XML = order in the menu.
 """
 
 from __future__ import annotations
@@ -28,16 +28,16 @@ from .texts import (
 
 @dataclass(frozen=True)
 class ScriptItem:
-    """Pozycja menu uruchamiająca skrypt Pythona."""
+    """Menu entry that launches a Python script."""
 
     name: str
-    directory: str  # wartość atrybutu dir (relatywna wobec katalogu bazowego)
+    directory: str  # value of the dir attribute (relative to the base directory)
     file: str
 
 
 @dataclass(frozen=True)
 class Folder:
-    """Folder (podmenu). Root ma w polu ``name`` tytuł menu."""
+    """Folder (submenu). The root carries the menu title in its ``name`` field."""
 
     name: str
     children: Tuple["MenuNode", ...]
@@ -47,18 +47,17 @@ MenuNode = Union[Folder, ScriptItem]
 
 
 class ConfigError(Exception):
-    """Błąd pliku konfiguracyjnego XML z czytelnym komunikatem po polsku."""
+    """XML configuration file error with a clear message."""
 
 
 _START_TAG_RE = re.compile(r"<([A-Za-z_][A-Za-z0-9_.\-:]*)")
 
 
 def _tag_lines(xml_text: str) -> Dict[str, List[int]]:
-    """Mapa tag -> numery linii znaczników otwierających (kolejność dokumentu).
+    """Map of tag -> line numbers of opening tags (document order).
 
-    Znacznik zamykający </x> nie pasuje do wzorca; w atrybutach surowe '<'
-    jest niedozwolone przez XML, więc dopasowania odpowiadają dokładnie
-    znacznikom otwierającym.
+    A closing tag </x> does not match the pattern; raw '<' is disallowed in
+    attribute values by XML, so matches correspond exactly to opening tags.
     """
     lines: Dict[str, List[int]] = {}
     for match in _START_TAG_RE.finditer(xml_text):
@@ -69,7 +68,7 @@ def _tag_lines(xml_text: str) -> Dict[str, List[int]]:
 
 
 class _LineRecordingBuilder(ET.TreeBuilder):
-    """TreeBuilder zapisujący numery linii elementów (do komunikatów o błędach)."""
+    """TreeBuilder recording element line numbers (for error messages)."""
 
     def __init__(self, tag_lines: Dict[str, List[int]]) -> None:
         super().__init__()
@@ -88,7 +87,7 @@ class _LineRecordingBuilder(ET.TreeBuilder):
 
 
 def parse_menu(xml_text: str) -> Folder:
-    """Buduje drzewo menu z tekstu XML; root ma ``name`` równe tytułowi."""
+    """Builds the menu tree from XML text; root has ``name`` equal to the title."""
     builder = _LineRecordingBuilder(_tag_lines(xml_text))
     parser = ET.XMLParser(target=builder)
     try:
@@ -97,14 +96,14 @@ def parse_menu(xml_text: str) -> Folder:
     except ET.ParseError as exc:
         position = getattr(exc, "position", None)
         if isinstance(position, tuple) and len(position) >= 2:
-            detail = f"{exc.msg}, linia {position[0]}, kolumna {position[1]}"
+            detail = f"{exc.msg}, line {position[0]}, column {position[1]}"
         else:
             detail = str(exc)
         raise ConfigError(ERR_XML_PARSE.format(detail=detail)) from exc
 
     def line_suffix(elem: ET.Element) -> str:
         line_no = builder.line_of.get(id(elem))
-        return f", linia {line_no}" if line_no is not None else ""
+        return f", line {line_no}" if line_no is not None else ""
 
     if root_elem.tag != "menu":
         raise ConfigError(ERR_BAD_ROOT_ELEMENT.format(tag=root_elem.tag) + line_suffix(root_elem))
@@ -142,7 +141,7 @@ def parse_menu(xml_text: str) -> Folder:
 
 
 def load_menu(xml_path: Path) -> Folder:
-    """Wczytuje i parsuje plik konfiguracyjny; zwraca root (name = tytuł)."""
+    """Reads and parses the configuration file; returns root (name = title)."""
     path = Path(xml_path)
     if not path.exists():
         raise ConfigError(ERR_CONFIG_FILE_NOT_FOUND.format(path=str(path)))

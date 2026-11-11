@@ -1,4 +1,4 @@
-"""Testy budowy tekstu ekranu menu - czysta funkcja (Krok 6 specyfikacji)."""
+"""Tests of the menu screen text building - a pure function (Step 6 of the specification)."""
 
 from menu_app.renderer import render_screen
 from menu_app.texts import FOOTER_TEXT
@@ -9,9 +9,9 @@ def _lines(screen: str) -> list[str]:
 
 
 def test_selected_row_has_prefix_and_is_unique() -> None:
-    screen = render_screen("Tytuł", (), ["Alfa", "Beta", "Gama"], 1, 80, 24)
+    screen = render_screen("Title", (), ["Alfa", "Beta", "Gama"], 1, 80, 24)
     lines = _lines(screen)
-    assert lines[0] == "Tytuł"
+    assert lines[0] == "Title"
     assert lines[2] == "  Alfa"
     assert lines[3] == "> Beta"
     assert lines[4] == "  Gama"
@@ -20,9 +20,9 @@ def test_selected_row_has_prefix_and_is_unique() -> None:
 
 
 def test_breadcrumb_in_header() -> None:
-    screen = render_screen("Główne", ("Narzędzia", "Zaawansowane"), ["x"], 0, 80, 24)
+    screen = render_screen("Main", ("Tools", "Advanced"), ["x"], 0, 80, 24)
     lines = _lines(screen)
-    assert lines[0] == "Główne / Narzędzia / Zaawansowane"
+    assert lines[0] == "Main / Tools / Advanced"
 
 
 def test_separator_length() -> None:
@@ -38,31 +38,31 @@ def test_blank_line_before_footer() -> None:
     assert lines[-2] == ""
 
 
-LABELS_50 = [f"pozycja {i}" for i in range(50)]
+LABELS_50 = [f"item {i}" for i in range(50)]
 
 
 def test_scrolling_selected_always_visible() -> None:
     for selected in (0, 25, 49):
         screen = render_screen("T", (), LABELS_50, selected, 80, 10)
         lines = _lines(screen)
-        assert f"> pozycja {selected}" in lines
+        assert f"> item {selected}" in lines
 
 
 def test_scrolling_indicators_in_right_places() -> None:
-    # na początku listy: brak wskaźnika u góry, wskaźnik na dole
+    # at the start of the list: no indicator on top, indicator at the bottom
     top_lines = _lines(render_screen("T", (), LABELS_50, 0, 80, 10))
-    area_top = [l for l in top_lines[2:-2]]          # bez nagłówków i stopki
-    assert area_top[0] == "> pozycja 0"
+    area_top = [l for l in top_lines[2:-2]]          # without headers and footer
+    assert area_top[0] == "> item 0"
     assert "  ..." not in (area_top[0],)
     assert area_top[-1] == "  ..."
 
-    # na końcu listy: wskaźnik u góry, brak na dole
+    # at the end of the list: indicator on top, none at the bottom
     bottom_lines = _lines(render_screen("T", (), LABELS_50, 49, 80, 10))
     area_bottom = [l for l in bottom_lines[2:-2]]
-    assert area_bottom[-1] == "> pozycja 49"
+    assert area_bottom[-1] == "> item 49"
     assert area_bottom[0] == "  ..."
 
-    # w środku: wskaźniki z obu stron
+    # in the middle: indicators on both sides
     middle_lines = _lines(render_screen("T", (), LABELS_50, 25, 80, 10))
     area_middle = [l for l in middle_lines[2:-2]]
     assert area_middle[0] == "  ..."
@@ -77,7 +77,7 @@ def test_scrolling_respects_height_limit() -> None:
 
 def test_long_label_truncated_with_ellipsis() -> None:
     long_label = "x" * 60
-    screen = render_screen("Tytuł bardzo długi ponad szerokość okna", (), [long_label], 0, 30, 24)
+    screen = render_screen("A very long title that exceeds the window width", (), [long_label], 0, 30, 24)
     lines = _lines(screen)
     assert len(lines[0]) <= 30
     assert lines[0].endswith("…")
@@ -94,6 +94,7 @@ def test_no_exception_on_tiny_windows() -> None:
 
 
 def test_polish_characters_survive() -> None:
+    # functional Unicode check - diacritics must survive rendering
     screen = render_screen("Żółw", ("Ślimak",), ["ż ę ł ż ą ć ń ó ś ź ć"], 0, 80, 24)
     assert "Żółw / Ślimak" in screen
     assert "> ż ę ł ż ą ć ń ó ś ź ć" in screen

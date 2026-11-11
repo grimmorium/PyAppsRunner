@@ -1,8 +1,8 @@
-"""Punkt wejścia aplikacji (cienka warstwa nad menu_app.App) - Krok 9.
+"""Application entry point (a thin layer over menu_app.App) - Step 9.
 
-Odczytuje argumenty wiersza poleceń, ładuje konfigurację XML i uruchamia
-pętlę główną. Kody wyjścia: 0 = normalne zakończenie, 2 = błąd konfiguracji,
-3 = stdin nie jest terminalem (brak trybu interaktywnego).
+Reads command-line arguments, loads the XML configuration and starts the
+main loop. Exit codes: 0 = normal exit, 2 = configuration error,
+3 = stdin is not a terminal (no interactive mode).
 """
 
 from __future__ import annotations
@@ -21,32 +21,32 @@ from menu_app.texts import MSG_CONFIG_ERROR, MSG_NO_TTY
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Menu tekstowe uruchamiające skrypty .py (klawisze: a/z/Enter)."
+        description="Text menu that runs .py scripts (keys: a/z/Enter)."
     )
     default_base = Path(__file__).resolve().parent
     parser.add_argument(
         "--config",
         type=Path,
         default=None,
-        help="ścieżka do pliku XML z menu (domyślnie <base-dir>/menu.xml)",
+        help="path to the XML menu file (default <base-dir>/menu.xml)",
     )
     parser.add_argument(
         "--base-dir",
         dest="base_dir",
         type=Path,
         default=default_base,
-        help="katalog bazowy dla ścieżek skryptów z XML-a (domyślnie katalog aplikacji)",
+        help="base directory for script paths from the XML (default: application directory)",
     )
     return parser
 
 
 def main(argv: Optional[list[str]] = None, key_reader: Optional[KeyReader] = None, out: Optional[TextIO] = None) -> int:
-    """Punkt wejścia; parametry testowe pozwalają wstrzyknąć I/O."""
+    """Entry point; test parameters allow injecting I/O."""
     args = _build_parser().parse_args(argv)
     config_path: Path = args.config if args.config is not None else args.base_dir / "menu.xml"
 
     stream: TextIO = out if out is not None else sys.stdout
-    if hasattr(stream, "reconfigure"):  # CPython-owy stdout; pod testami bywa substytutem
+    if hasattr(stream, "reconfigure"):  # CPython stdout; under tests it may be a substitute
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (ValueError, OSError):

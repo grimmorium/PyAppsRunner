@@ -1,9 +1,9 @@
-"""Kontrakt skryptu wywoływanego przez menu (Krok 4 specyfikacji).
+"""Contract of a script invoked by the menu (Step 4 of the specification).
 
-Skrypt to zwykły plik .py z funkcją ``run(ctx)`` na poziomie modułu:
-wartość None/0 oznacza sukces, inna liczba całkowita - błąd. Powrót do
-menu następuje przez zwykłe zakończenie run(). Skrypt nie zmienia
-katalogu roboczego procesu; katalog skryptu jest dostępny w sys.path.
+A script is an ordinary .py file with a module-level ``run(ctx)`` function:
+a return value of None/0 means success, any other integer - an error. The
+return to the menu happens via simply finishing run(). A script does not
+change the process working directory; its directory is available on sys.path.
 """
 
 from __future__ import annotations
@@ -17,21 +17,21 @@ from .texts import PRESS_ENTER
 
 @dataclass
 class ScriptContext:
-    """Kontekst przekazywany funkcji ``run(ctx)`` wywoływanego skryptu."""
+    """Context passed to the ``run(ctx)`` function of an invoked script."""
 
-    base_dir: Path  # katalog bazowy aplikacji
-    script_path: Path  # pełna ścieżka uruchamianego pliku
-    script_dir: Path  # katalog, w którym leży skrypt
-    menu_path: Tuple[str, ...] = ()  # np. ("Narzędzia", "Zaawansowane")
-    skip_pause: bool = False  # True -> brak pauzy "Naciśnij Enter..."
+    base_dir: Path  # application base directory
+    script_path: Path  # full path of the file being run
+    script_dir: Path  # directory containing the script
+    menu_path: Tuple[str, ...] = ()  # e.g. ("Tools", "Advanced")
+    skip_pause: bool = False  # True -> no "Press Enter..." pause
     exit_to_root_requested: bool = field(default=False)
 
     def exit_to_root(self) -> None:
-        """Wymaga powrotu do menu głównego po zakończeniu run()."""
+        """Requests returning to the main menu after run() finishes."""
         self.exit_to_root_requested = True
 
     def pause(self, message: str = PRESS_ENTER) -> None:
-        """Pauza dla użytkownika (input); EOFError jest ignorowane."""
+        """Pause for the user (input); EOFError is ignored."""
         try:
             input(message)
         except EOFError:

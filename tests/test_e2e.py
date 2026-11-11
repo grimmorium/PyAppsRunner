@@ -1,9 +1,9 @@
-"""Testy end-to-end: prawdziwy App + prawdziwy run_script (Krok 10).
+"""End-to-end tests: real App + real run_script (Step 10).
 
-Sekwencje klawiszy odpalane są przez FakeKeyReader na fixture tmp_project;
-pauza i czyszczenie ekranu to no-op, więc sekwencja może się zakończyć bez
-interakcji. Dodatkowo jeden test uruchamia `python main.py` pod pseudoterminalem
-(pty) - tylko POSIX (skipif nt).
+Key sequences are driven through FakeKeyReader on the tmp_project fixture;
+pause and screen clearing are no-ops, so a sequence can finish without any
+interaction. Additionally one test runs `python main.py` under a pseudoterminal
+(pty) - POSIX only (skipif nt).
 """
 
 import io
@@ -27,13 +27,13 @@ SCREEN_SEP = "\x00SCR\x00"
 
 
 def make_e2e(tmp_project: Path, keys):
-    """Prawdziwy App na tmp_project; zwraca (app, out, pauses)."""
+    """Real App on tmp_project; returns (app, out, pauses)."""
     root = load_menu(tmp_project / "menu.xml")
     out = io.StringIO()
     pauses: list[object] = []
 
     def clear(stream) -> None:
-        stream.write(SCREEN_SEP)  # separator ekranów do assertions
+        stream.write(SCREEN_SEP)  # screen separator for assertions
 
     app = App(
         root=root,
@@ -47,66 +47,66 @@ def make_e2e(tmp_project: Path, keys):
 
 
 def screens(out_text: str) -> list[str]:
-    """Poszczególne narysowane ekrany (po separatorze z fake'owego clear)."""
+    """Individual drawn screens (after the fake-clear separator)."""
     return [p for p in out_text.split(SCREEN_SEP) if p.strip()]
 
 
-# Drzewo fixture tmp_project:
-# root: Znacznik(0, marker.py), Błęd demo(1, boom.py), Narzędzia(2), Wyjście(3)
-#   Narzędzia -> Głęboko -> Do roota(0, to_root.py), Głęboki skrypt(1, deep.py)
+# tmp_project fixture tree:
+# root: Marker(0, marker.py), Error demo(1, boom.py), Tools(2), Exit(3)
+#   Tools -> Deep -> To root(0, to_root.py), Deep script(1, deep.py)
 
 def test_e2e_marker_script_writes_file(tmp_project: Path) -> None:
-    keys = [Key.ENTER] + [Key.DOWN, Key.DOWN, Key.DOWN, Key.ENTER]  # marker; potem wyjście
+    keys = [Key.ENTER] + [Key.DOWN, Key.DOWN, Key.DOWN, Key.ENTER]  # marker; then exit
     app, out, pauses = make_e2e(tmp_project, keys)
     assert app.run() == 0
     marker = tmp_project / "marker.txt"
-    assert marker.exists(), "skrypt-znacznik nie został uruchomiony"
+    assert marker.exists(), "the marker script was not run"
     assert marker.read_text(encoding="utf-8") == "ok"
-    assert len(pauses) == 1  # pauza po pomyślnym skrypcie
+    assert len(pauses) == 1  # pause after a successful script
 
 
 def test_e2e_error_script_does_not_kill_app(tmp_project: Path) -> None:
-    keys = [Key.DOWN, Key.ENTER] + [Key.DOWN, Key.DOWN, Key.ENTER]  # boom; potem wyjście
+    keys = [Key.DOWN, Key.ENTER] + [Key.DOWN, Key.DOWN, Key.ENTER]  # boom; then exit
     app, out, _pauses = make_e2e(tmp_project, keys)
-    assert app.run() == 0  # menu przeżyło błąd i pozwoliło normalnie wyjść
-    expected = SCRIPT_ERROR_WITH_CODE.format(error="RuntimeError: Celowy błąd testowy", code=1)
+    assert app.run() == 0  # the menu survived the error and allowed a normal exit
+    expected = SCRIPT_ERROR_WITH_CODE.format(error="RuntimeError: Intentional test error", code=1)
     assert expected in out.getvalue()
 
 
 def test_e2e_exit_to_root_from_deep_level(tmp_project: Path, capsys) -> None:
     keys = [
-        Key.DOWN, Key.DOWN, Key.ENTER,   # Narzędzia
-        Key.ENTER,                        # Głęboko (sel 0 = Do roota)
-        Key.ENTER,                        # uruchomienie to_root.py (exit_to_root)
-        Key.DOWN, Key.DOWN, Key.DOWN, Key.ENTER,  # z menu głównego: Wyjście
+        Key.DOWN, Key.DOWN, Key.ENTER,   # Tools
+        Key.ENTER,                        # Deep (sel 0 = To root)
+        Key.ENTER,                        # run to_root.py (exit_to_root)
+        Key.DOWN, Key.DOWN, Key.DOWN, Key.ENTER,  # from the main menu: Exit
     ]
     app, out, _pauses = make_e2e(tmp_project, keys)
     assert app.run() == 0
-    assert "Zwracam do menu glownego" in capsys.readouterr().out
+    assert "Returning to main menu" in capsys.readouterr().out
     headers = [s.splitlines()[0] for s in screens(out.getvalue())]
-    deep_idx = headers.index("Menu testowe / Narzędzia / Głęboko")
-    # pierwszy ekran po głębokim poziomie musi być znowu menu głównym
-    assert headers[deep_idx + 1] == "Menu testowe"
+    deep_idx = headers.index("Test menu / Tools / Deep")
+    # the first screen after a deep level must be the main menu again
+    assert headers[deep_idx + 1] == "Test menu"
 
 
 def test_e2e_full_path_folder_podfolder_script_back_exit(tmp_project: Path, capsys) -> None:
     keys = [
-        Key.DOWN, Key.DOWN, Key.ENTER,   # Narzędzia (sel root = 2)
-        Key.ENTER,                        # Głęboko (sel 0)
-        Key.DOWN, Key.ENTER,              # Głęboki skrypt (sel 1) -> uruchomienie deep.py
-        Key.DOWN, Key.ENTER,              # Wstecz (Głęboko -> Narzędzia)
-        Key.DOWN, Key.ENTER,              # Wstecz (Narzędzia -> root, sel przywrócone = 2)
-        Key.DOWN, Key.ENTER,              # Wyjście
+        Key.DOWN, Key.DOWN, Key.ENTER,   # Tools (root sel = 2)
+        Key.ENTER,                        # Deep (sel 0)
+        Key.DOWN, Key.ENTER,              # Deep script (sel 1) -> run deep.py
+        Key.DOWN, Key.ENTER,              # Back (Deep -> Tools)
+        Key.DOWN, Key.ENTER,              # Back (Tools -> root, restored sel = 2)
+        Key.DOWN, Key.ENTER,              # Exit
     ]
     app, out, pauses = make_e2e(tmp_project, keys)
     assert app.run() == 0
-    assert "Gleboki skrypt dziala" in capsys.readouterr().out
+    assert "Deep script works" in capsys.readouterr().out
     assert len(pauses) == 1
 
 
-@pytest.mark.skipif(os.name == "nt", reason="pseudoterminal (pty) dostępny tylko na POSIX")
+@pytest.mark.skipif(os.name == "nt", reason="pseudoterminal (pty) available only on POSIX")
 def test_main_subprocess_under_pty(tmp_project: Path) -> None:
-    """`python main.py` pod pseudoterminalem: sekwencja klawiszy, kod 0 i tekst skryptu."""
+    """`python main.py` under a pseudoterminal: key sequence, code 0 and script text."""
     import pty
 
     master_fd, slave_fd = pty.openpty()
@@ -121,11 +121,11 @@ def test_main_subprocess_under_pty(tmp_project: Path) -> None:
         stdout=slave_fd,
         stderr=subprocess.STDOUT,
     )
-    os.close(slave_fd)  # dziecko ma własną kopię; rodzic trzyma tylko master
+    os.close(slave_fd)  # the child has its own copy; the parent keeps only the master
     output = bytearray()
 
     def send_until_quiet(data: bytes, deadline_s: float = 8.0) -> bool:
-        """Zapisuje dane (jeśli są) i czyta do ustania aktywności lub EOF."""
+        """Writes data (if any) and reads until activity stops or EOF."""
         if data:
             os.write(master_fd, data)
         idle = 0.0
@@ -136,7 +136,7 @@ def test_main_subprocess_under_pty(tmp_project: Path) -> None:
                 try:
                     chunk = os.read(master_fd, 65536)
                 except OSError:
-                    return False  # pty zamknięte (dziecko zakończyło pracę)
+                    return False  # pty closed (the child finished)
                 if not chunk:
                     return False
                 output.extend(chunk)
@@ -147,14 +147,14 @@ def test_main_subprocess_under_pty(tmp_project: Path) -> None:
                     return True
             if time.time() > end:
                 raise AssertionError(
-                    f"timeout - aplikacja nie ustabilizowała się; dotąd: {bytes(output)!r}"
+                    f"timeout - the application did not settle; so far: {bytes(output)!r}"
                 )
 
     try:
-        send_until_quiet(b"")  # pierwsze uruchomienie + ekran początkowy
+        send_until_quiet(b"")  # first run + initial screen
         for chunk in (b"zz\r", b"\r", b"z\r", b"\r", b"z\r", b"z\r", b"z\r"):
-            # zz\r -> Narzędzia; \r -> Głęboko; z\r -> deep.py; \r -> pauza;
-            # z\r, z\r -> Wstecz x2 (root); z\r -> Wyjście
+            # zz\r -> Tools; \r -> Deep; z\r -> deep.py; \r -> pause;
+            # z\r, z\r -> Back x2 (root); z\r -> Exit
             send_until_quiet(chunk)
         rc = proc.wait(timeout=10)
     finally:
@@ -163,5 +163,5 @@ def test_main_subprocess_under_pty(tmp_project: Path) -> None:
         os.close(master_fd)
 
     text = bytes(output).decode("utf-8", errors="replace")
-    assert rc == 0, f"kod wyjścia {rc}; wynik: {text!r}"
-    assert "Gleboki skrypt dziala" in text  # wydruk skryptu dotarł do terminala
+    assert rc == 0, f"exit code {rc}; output: {text!r}"
+    assert "Deep script works" in text  # the script output reached the terminal

@@ -1,9 +1,9 @@
-"""Ładowanie i uruchamianie skryptów w tym samym procesie (Krok 4).
+"""Loading and running scripts in the same process (Step 4).
 
-Skrypt jest ładowany przez importlib pod unikalną nazwą modułu, usuwany
-z sys.modules po zakończeniu (każde uruchomienie to świeże wykonanie), a
-katalog skryptu na czas wywołania trafia na początek sys.path. Błędy
-skryptu nigdy nie propagują się do menu.
+A script is loaded via importlib under a unique module name, removed from
+sys.modules after finishing (every run is a fresh execution), and its
+directory is placed at the front of sys.path for the duration of the call.
+Script errors never propagate to the menu.
 """
 
 from __future__ import annotations
@@ -28,11 +28,11 @@ from .texts import (
 
 @dataclass
 class RunResult:
-    """Wynik uruchomienia skryptu."""
+    """Script run result."""
 
     ok: bool
-    return_code: int = 0  # 0 = sukces
-    error: Optional[str] = None  # komunikat dla użytkownika
+    return_code: int = 0  # 0 = success
+    error: Optional[str] = None  # message for the user
     exit_to_root: bool = False
     skip_pause: bool = False
 
@@ -43,10 +43,10 @@ def _module_name_for(script_path: Path) -> str:
 
 
 def run_script(ctx: ScriptContext) -> RunResult:
-    """Uruchamia ``run(ctx)`` z pliku wskazanego w kontekście.
+    """Runs ``run(ctx)`` from the file indicated in the context.
 
-    Zawsze zwraca RunResult - wyjątki skryptu są łapane i raportowane,
-    nigdy nie propagują się dalej (również SystemExit i KeyboardInterrupt).
+    Always returns a RunResult - script exceptions are caught and reported,
+    never propagated further (including SystemExit and KeyboardInterrupt).
     """
     module_name = _module_name_for(ctx.script_path)
     script_dir_str = str(ctx.script_dir.resolve())
@@ -99,7 +99,7 @@ def run_script(ctx: ScriptContext) -> RunResult:
             print(INTERRUPTED_MESSAGE)
             return finish(True, 130, None)
 
-        except Exception as exc:  # noqa: BLE001 - kontrakt: menu zawsze przetrwa błąd skryptu
+        except Exception as exc:  # noqa: BLE001 - contract: the menu always survives a script error
             traceback.print_exc()
             message = f"{type(exc).__name__}" + (f": {exc}" if str(exc) else "")
             return finish(False, 1, message)
